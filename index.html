@@ -5,31 +5,28 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Ramo del día</title>
 <meta name="robots" content="noindex, nofollow">
-<meta name="theme-color" content="#f3ead8">
+<meta name="theme-color" content="#0d0206">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;1,400&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Jacquard+24&family=Jacquarda+Bastarda+9&display=swap">
 <style>
-  /* Estilo 1 · Ilustración de tinta: papel crema, tinta marrón, rellenos planos en salvia, terracota y mostaza */
-  :root{
-    --papel:#f3ead8; --tinta:#3b2a1e; --salvia:#8a9a7b; --terracota:#c0603e; --mostaza:#d9a441;
-    --f:"Cormorant Garamond","Iowan Old Style",Georgia,serif;
-    color-scheme:light;
-  }
+  /* Estilo pixel art: noche burdeos, tinta crema, letra gótica de píxeles */
   [hidden]{display:none!important}
-  html,body{margin:0;height:100%;background:var(--papel);color:var(--tinta);overflow:hidden;overscroll-behavior:none;
-    -webkit-tap-highlight-color:transparent;-webkit-user-select:none;user-select:none;touch-action:manipulation}
-  #lienzo{position:fixed;inset:0;width:100%;height:100%;display:block}
-  .cabecera{position:fixed;left:0;right:0;top:calc(26px + env(safe-area-inset-top,0px));display:flex;flex-direction:column;align-items:center;gap:8px;
-    text-align:center;pointer-events:none;opacity:0;transition:opacity 1.8s ease}
+  html,body{margin:0;height:100%;background:#0d0206;color:#ecdcbd;overflow:hidden;overscroll-behavior:none;
+    -webkit-tap-highlight-color:transparent;-webkit-user-select:none;user-select:none;touch-action:manipulation;
+    -webkit-font-smoothing:none}
+  canvas{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);display:block;
+    image-rendering:crisp-edges;image-rendering:pixelated}
+  .cabecera{position:fixed;left:0;right:0;top:calc(24px + env(safe-area-inset-top,0px));z-index:2;display:flex;flex-direction:column;
+    align-items:center;gap:8px;text-align:center;pointer-events:none;opacity:0;transition:opacity 1.6s ease}
   .cabecera.on{opacity:1}
-  .marca{font:500 11px/1 var(--f);letter-spacing:.34em;text-transform:uppercase;color:var(--salvia)}
-  .fecha{font:italic 400 25px/1.1 var(--f);color:var(--tinta)}
-  .trazo{width:64px;height:6px;display:block}
-  .saludo{max-width:min(82vw,340px);margin-top:2px;font:italic 400 18px/1.35 var(--f);color:var(--salvia);text-wrap:balance}
+  .marca{font:400 18px/1 "Jacquarda Bastarda 9",Georgia,serif;color:#8a6a55;letter-spacing:.06em}
+  .fecha{font:400 48px/1 "Jacquard 24","Old English Text MT",Georgia,serif;color:#d9625f}
+  .saludo{max-width:min(86vw,360px);font:italic 400 18px/1.45 "Jacquarda Bastarda 9",Georgia,serif;color:#ecdcbd;text-wrap:balance}
   .solo{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;text-align:center;padding:24px}
-  .solo h1{margin:0;font:italic 400 46px/1 var(--f);color:var(--tinta)}
-  .solo p{margin:0;font:400 19px/1.4 var(--f);color:var(--salvia)}
+  .solo h1{margin:0;font:400 48px/1 "Jacquard 24",Georgia,serif;color:#d9625f}
+  .solo p{margin:0;font:italic 400 18px/1.5 "Jacquarda Bastarda 9",Georgia,serif;color:#d4bd98}
+  @media (max-width:360px){.fecha{font-size:40px}}
 </style>
 <script>
   // Solo móviles y tabletas: en ordenador se muestra un aviso.
@@ -38,60 +35,79 @@
 </script>
 </head>
 <body>
-<canvas id="lienzo" aria-label="Animación: un ramo ilustrado a tinta que nace de fuegos artificiales y gira"></canvas>
+<canvas id="c" aria-label="Animación pixel art: un ramo de flores que nace de fuegos artificiales y gira"></canvas>
 <header class="cabecera" id="cab">
   <span class="marca">Ramo del día</span>
-  <span class="fecha">Miércoles, 25 de noviembre</span>
-  <svg class="trazo" viewBox="0 0 64 6" aria-hidden="true"><path d="M2 3.4 C 14 1.2, 22 5.2, 32 3.1 S 52 1.6, 62 3.6" fill="none" stroke="#3b2a1e" stroke-width="1.1" stroke-linecap="round"/></svg>
-  <span class="saludo">Buenos días. Que hoy todo te salga tan bonito como estas flores.</span>
+  <span class="fecha">Martes, 24 de noviembre</span>
+  <span class="saludo">Buenos días. Hoy el día empieza con flores y fuegos artificiales.</span>
 </header>
 <main class="solo" id="solo" hidden>
   <h1>Ramo del día</h1>
   <p>Este ramo solo se abre desde el móvil.</p>
 </main>
-
 <script>
 (() => {
 'use strict';
 const TAU = Math.PI * 2;
-const cv = document.getElementById('lienzo');
+const cv = document.getElementById('c');
 const cab = document.getElementById('cab');
 if (!window.ES_MOVIL) {
   cv.hidden = true; cab.hidden = true;
   document.getElementById('solo').hidden = false;
   return;
 }
-const ctx = cv.getContext('2d');
+const ctx = cv.getContext('2d', { alpha: false });
+const VEL = 1.25; // ritmo de la animación (un 20% más rápido)
 
-/* ---------- Paleta ---------- */
-const C = {
-  papel: '#f3ead8', tinta: '#3b2a1e',
-  salvia: '#8a9a7b', salviaO: '#6f7e62', salviaC: '#a9b69a',
-  terracota: '#c0603e', terracotaC: '#d98a68', terracotaO: '#96472c',
-  mostaza: '#d9a441', mostazaC: '#ecc77e', mostazaO: '#a97a2a',
-  blanco: '#fbf6ea', blancoO: '#e2d4b6', kraft: '#e8d7b4',
-};
+/* ---------- Paleta (oscuro → claro) ---------- */
+const HEX = [
+  ['#24060e','#3f0b18','#5c1022','#7a162d','#9a2138','#bc3848','#d9625f'], // 0 burdeos
+  ['#5e4034','#8a6a55','#b39575','#d4bd98','#ecdcbd','#f8eedb','#fffaf0'], // 1 crema
+  ['#4a1520','#73303a','#9c5056','#c17a77','#dda59c','#f0cbbd','#fae6da'], // 2 rosa empolvado
+  ['#2c1d14','#4a3424','#6b5036','#8f7150','#b0936c','#cdb68e'],           // 3 tallo
+  ['#6e5444','#977b63','#bea283','#dcc6a3','#efe2c8','#faf3e4'],           // 4 papel
+  ['#0d0206','#15040a','#1f0710','#2a0b16','#37101d','#45151f'],           // 5 fondo
+  ['#fffaf0','#f8e6c6','#f0c7a8','#e0909a','#c04a5c','#8a1f34'],           // 6 chispa
+  ['#231c12','#3d3322','#5c5034','#7d7049','#9d9163','#c0b585'],           // 7 hoja seca
+];
+const u32 = h => { const n = parseInt(h.slice(1), 16); return (0xFF000000 | ((n & 255) << 16) | (n & 0xFF00) | (n >> 16)) >>> 0; };
+const RAMPS = HEX.map(r => Uint32Array.from(r, u32));
+const BUR = 0, CRE = 1, BLU = 2, STEM = 3, PAPER = 4, BGR = 5, SPK = 6, LEAF = 7;
+const SP = RAMPS[SPK];
+const BAY = new Float32Array([0,8,2,10,12,4,14,6,3,11,1,9,15,7,13,5].map(v => (v + 0.5) / 16));
 
-/* ---------- Tiempo (s) ---------- */
-const T0 = 0.45, STG = 0.27, ROCK = 0.6, BURST = 0.45, DRAW = 0.75;
-const T_HOJA = 3.6, T_CONO = 4.85, D_CONO = 0.9, T_CINTA = 5.7, D_CINTA = 0.45, T_LAZO = 6.0, D_LAZO = 0.5;
-const T_ROT = 6.6, RAMP = 1.2;
-let PERIOD = 8;
+const K_FL = 0, K_STEM = 1, K_LEAF = 2, K_BABY = 3, K_WRAP = 4, K_RIB = 5, K_BOW = 6;
 
-/* ---------- Cámara ---------- */
-const TILT = 0.3, FOC = 4.2, CT = Math.cos(TILT), ST = Math.sin(TILT);
-let CA = 1, SA = 0, BOB = 0;
+/* ---------- Cámara / luz ---------- */
+const TILT = 0.32, FOC = 4.2;
+const CT = Math.cos(TILT), ST = Math.sin(TILT);
+let LX = -0.45, LY = 0.62, LZ = 0.64;
+{ const l = Math.hypot(LX, LY, LZ); LX /= l; LY /= l; LZ /= l; }
 
-/* ---------- Envoltorio ---------- */
-const YB = -0.75, SLOPE = 0.55, R0 = 0.08, Y_CINTA = -0.42;
-const coneR = (y) => R0 + (y - YB) * SLOPE;
-const yTop = (th) => 0.05 - 0.13 * Math.sin(th) + 0.03 * Math.abs(Math.sin(th * 4.5));
+/* ---------- Línea de tiempo (segundos) ---------- */
+const T0 = 0.7, STG = 0.34, ROCK = 0.85, TB = 0.5, TM = 0.85, DEL = 0.3;
+const T_LEAF = 4.7, T_BABY = 5.6, T_WRAP = 6.5, D_WRAP = 1.1;
+const T_RIB = 7.5, D_RIB = 0.5, T_BOW = 7.9, D_BOW = 0.45, T_ROT = 8.5;
+const PERIOD = 7, RAMP_T = 1.2;
+const GL = 40; // chispas sueltas por explosión
+
+/* ---------- Geometría del papel ---------- */
+const YB = -0.75, SLOPE = 0.55, R0 = 0.08, YMAX = 0.22;
+const coneR = y => R0 + (y - YB) * SLOPE;
+const yTop = th => 0.05 - 0.13 * Math.sin(th) + 0.03 * Math.abs(Math.sin(th * 4.5));
 
 /* ---------- Utilidades ---------- */
-const clamp01 = (v) => (v < 0 ? 0 : v > 1 ? 1 : v);
-const eo2 = (u) => 1 - (1 - u) * (1 - u);
-const eo3 = (u) => 1 - (1 - u) * (1 - u) * (1 - u);
-const backOut = (u) => { const c1 = 1.8, c3 = c1 + 1, v = u - 1; return 1 + c3 * v * v * v + c1 * v * v; };
+const clamp01 = v => v < 0 ? 0 : v > 1 ? 1 : v;
+const eo2 = u => 1 - (1 - u) * (1 - u);
+const eo3 = u => 1 - (1 - u) * (1 - u) * (1 - u);
+const eio = u => u < 0.5 ? 4 * u * u * u : 1 - Math.pow(-2 * u + 2, 3) / 2;
+const backOut = u => { const c1 = 1.9, c3 = c1 + 1, v = u - 1; return 1 + c3 * v * v * v + c1 * v * v; };
+const smooth = (a, b, x) => { const u = clamp01((x - a) / (b - a)); return u * u * (3 - 2 * u); };
+function ih(a, b) {
+  let h = (Math.imul(a | 0, 374761393) + Math.imul(b | 0, 668265263)) | 0;
+  h = Math.imul(h ^ (h >>> 13), 1274126177); h ^= h >>> 16;
+  return (h >>> 0) / 4294967296;
+}
 function rngF(seed) {
   return () => {
     seed = (seed + 0x6D2B79F5) | 0;
@@ -100,569 +116,339 @@ function rngF(seed) {
     return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
   };
 }
-const jit = (rng, a) => (rng() - 0.5) * a;
 
-function proj(x, y, z) {
-  const X1 = x * CA + z * SA, Z1 = z * CA - x * SA;
-  const Y2 = y * CT - Z1 * ST, Z2 = y * ST + Z1 * CT;
-  const k = FOC / (FOC - Z2);
-  return { x: CX + X1 * S * k, y: CY - (Y2 + BOB) * S * k, z: Z2, k };
-}
-function rotN(x, y, z) {
-  const X1 = x * CA + z * SA, Z1 = z * CA - x * SA;
-  return [X1, y * CT - Z1 * ST, y * ST + Z1 * CT];
-}
+/* ---------- Estado ---------- */
+let LW = 0, LH = 0, PXS = 1, SS = 1, CX = 0, CY = 0;
+let img, BUF, ZB, V0, G0, STARS = [];
+let NP = 0, PX, PY, PZ, NX, NY, NZ, RAMP, SHIFT, KIND, GRP, PAR, H1, H2, DX, DY, DZ, RB;
+let FL = [], BC = [0, 0, 0], BABYT = [];
+let CA = 1, SA = 0, BOB = 0;
+let tStart = performance.now();
 
-/* ---------- Dibujos a tinta (coordenadas unidad) ---------- */
-function blob(rng, n, r0, amp, freq, ox = 0, oy = 0) {
-  const pts = [], ph = rng() * TAU;
-  for (let i = 0; i < n; i++) {
-    const t = i / n * TAU, r = r0 * (1 + amp * Math.sin(t * freq + ph) + jit(rng, 0.05));
-    pts.push([ox + Math.cos(t) * r, oy + Math.sin(t) * r]);
-  }
-  return pts;
-}
-const closed = (pts) => pts.concat([pts[0]]);
-function finish(def) {
-  def.len = 0;
-  for (const s of def.strokes) {
-    s.seg = [];
-    for (let i = 1; i < s.pts.length; i++) { const L = Math.hypot(s.pts[i][0] - s.pts[i - 1][0], s.pts[i][1] - s.pts[i - 1][1]); s.seg.push(L); def.len += L; }
-  }
-  def.dots = def.dots || [];
-  return def;
-}
-
-function makeRosa(rng) {
-  const fills = [], strokes = [];
-  const out = blob(rng, 30, 1, 0.07, 5);
-  fills.push({ pts: out, col: C.terracota, dx: 0.06, dy: 0.05 });
-  fills.push({ pts: blob(rng, 20, 0.48, 0.08, 4, -0.14, -0.16), col: C.terracotaC, dx: 0, dy: 0 });
-  strokes.push({ pts: closed(out), w: 1.15 });
-  const sp = [];
-  for (let i = 0; i <= 64; i++) {
-    const t = i / 64, th = t * 2.3 * TAU, r = 0.06 + 0.68 * t;
-    sp.push([Math.cos(th) * r + jit(rng, 0.03), Math.sin(th) * r * 0.92 + jit(rng, 0.03)]);
-  }
-  strokes.push({ pts: sp, w: 0.95 });
-  for (let k = 0; k < 5; k++) {
-    const c = k / 5 * TAU + 0.4 + jit(rng, 0.2), arc = [];
-    for (let i = 0; i <= 10; i++) { const u = i / 10, th = c - 0.55 + 1.1 * u, r = 0.76 + 0.1 * Math.sin(u * Math.PI); arc.push([Math.cos(th) * r, Math.sin(th) * r]); }
-    strokes.push({ pts: arc, w: 0.85 });
-  }
-  for (let k = 0; k < 5; k++) { const x = 0.2 + k * 0.1, y = 0.42 - k * 0.03; strokes.push({ pts: [[x, y], [x + 0.16, y + 0.2]], w: 0.55 }); }
-  return finish({ fills, strokes });
-}
-function makeRanunculo(rng) {
-  const fills = [], strokes = [], dots = [];
-  const out = blob(rng, 34, 1, 0.045, 9);
-  fills.push({ pts: out, col: C.mostaza, dx: 0.06, dy: 0.05 });
-  fills.push({ pts: blob(rng, 20, 0.52, 0.06, 5, -0.12, -0.14), col: C.mostazaC, dx: 0, dy: 0 });
-  strokes.push({ pts: closed(out), w: 1.15 });
-  for (const r of [0.86, 0.66, 0.46, 0.27]) {
-    const a0 = rng() * TAU, span = TAU * (0.72 + rng() * 0.12), arc = [];
-    for (let i = 0; i <= 28; i++) { const th = a0 + span * i / 28; const rr = r * (1 + 0.05 * Math.sin(th * 8)); arc.push([Math.cos(th) * rr, Math.sin(th) * rr]); }
-    strokes.push({ pts: arc, w: 0.8 });
-  }
-  dots.push({ x: 0, y: 0, r: 0.1, col: C.tinta });
-  for (let i = 0; i < 6; i++) { const th = i / 6 * TAU + rng(); dots.push({ x: Math.cos(th) * 0.17, y: Math.sin(th) * 0.17, r: 0.03, col: C.tinta }); }
-  return finish({ fills, strokes, dots });
-}
-function makeMargarita(rng) {
-  const fills = [], strokes = [], dots = [];
-  const n = 13, a0 = rng() * TAU;
-  for (let i = 0; i < n; i++) {
-    const a = a0 + i / n * TAU + jit(rng, 0.08), ca = Math.cos(a), sa = Math.sin(a);
-    const L = 0.42 + jit(rng, 0.08), Wd = 0.13 + jit(rng, 0.03), pts = [];
-    for (let j = 0; j < 14; j++) {
-      const t = j / 14 * TAU, ex = 0.56 + Math.cos(t) * L, ey = Math.sin(t) * Wd;
-      pts.push([ex * ca - ey * sa, ex * sa + ey * ca]);
-    }
-    fills.push({ pts, col: C.blanco, dx: 0.03, dy: 0.03 });
-    strokes.push({ pts: closed(pts), w: 0.8 });
-    strokes.push({ pts: [[0.3 * ca, 0.3 * sa], [0.72 * ca, 0.72 * sa]], w: 0.45 });
-  }
-  const cen = blob(rng, 18, 0.27, 0.05, 3);
-  fills.push({ pts: cen, col: C.mostaza, dx: 0.03, dy: 0.03 });
-  strokes.push({ pts: closed(cen), w: 1 });
-  for (let i = 0; i < 9; i++) { const r = Math.sqrt(rng()) * 0.17, th = rng() * TAU; dots.push({ x: Math.cos(th) * r, y: Math.sin(th) * r, r: 0.03, col: C.tinta }); }
-  return finish({ fills, strokes, dots });
-}
-function makeReverso(tipo, rng) {
-  const col = tipo === 'rosa' ? C.terracotaO : tipo === 'ranunculo' ? C.mostazaO : C.blancoO;
-  const fills = [], strokes = [];
-  const out = blob(rng, 28, 0.95, 0.06, 5);
-  fills.push({ pts: out, col, dx: 0.05, dy: 0.04 });
-  strokes.push({ pts: closed(out), w: 1.1 });
-  for (let k = 0; k < 5; k++) {
-    const a = k / 5 * TAU + rng() * 0.3, ca = Math.cos(a), sa = Math.sin(a);
-    const rot = (x, y) => [x * ca - y * sa, x * sa + y * ca];
-    const pts = [rot(0, 0), rot(0.32, 0.13), rot(0.78, 0), rot(0.32, -0.13)];
-    fills.push({ pts, col: C.salvia, dx: 0.02, dy: 0.02 });
-    strokes.push({ pts: closed(pts), w: 0.8 });
-  }
-  for (let k = 0; k < 4; k++) { const x = 0.15 + k * 0.12; strokes.push({ pts: [[x, 0.35], [x + 0.14, 0.62]], w: 0.5 }); }
-  return finish({ fills, strokes, dots: [{ x: 0, y: 0, r: 0.1, col: C.salviaO }] });
-}
-function makeEuca(rng) {
-  const fills = [], strokes = [];
-  const ys = (x) => 0.07 * Math.sin(Math.PI * x);
-  const stem = [];
-  for (let i = 0; i <= 20; i++) { const x = i / 20; stem.push([x, ys(x) + jit(rng, 0.01)]); }
-  strokes.push({ pts: stem, w: 1 });
-  let side = 1;
-  for (let x = 0.16; x <= 0.97; x += 0.115) {
-    const r = 0.075 * (1 - 0.3 * x) + jit(rng, 0.01), cx = x, cy = ys(x) + side * (r + 0.02);
-    const leaf = blob(rng, 12, r, 0.08, 3, cx, cy);
-    fills.push({ pts: leaf, col: rng() < 0.35 ? C.salviaO : C.salvia, dx: 0.01, dy: 0.008 });
-    strokes.push({ pts: [[x, ys(x)], [cx, cy]], w: 0.5 });
-    strokes.push({ pts: closed(leaf), w: 0.75 });
-    side = -side;
-  }
-  return finish({ fills, strokes });
-}
-function makeBaya(rng) {
-  const fills = [], strokes = [], dots = [];
-  const stem = [];
-  for (let i = 0; i <= 16; i++) { const x = i / 16; stem.push([x, -0.05 * Math.sin(Math.PI * x) + jit(rng, 0.008)]); }
-  strokes.push({ pts: stem, w: 0.9 });
-  const ends = [[1, 0]];
-  for (const s of [1, -1]) { const e = [0.86, s * 0.15]; strokes.push({ pts: [[0.55, -0.04], [0.72, s * 0.08], e], w: 0.75 }); ends.push(e); }
-  for (const [ex, ey] of ends) {
-    for (let b = 0; b < 3; b++) {
-      const cx = ex + jit(rng, 0.09), cy = ey + jit(rng, 0.09), r = 0.034 + rng() * 0.014;
-      const ring = blob(rng, 10, r, 0.03, 2, cx, cy);
-      fills.push({ pts: ring, col: C.terracota, dx: 0.006, dy: 0.005 });
-      strokes.push({ pts: closed(ring), w: 0.6 });
-      dots.push({ x: cx - r * 0.35, y: cy - r * 0.35, r: r * 0.28, col: C.blanco });
-    }
-  }
-  return finish({ fills, strokes, dots });
-}
-function makeLazo() {
-  const fills = [], strokes = [];
-  const rng = rngF(9);
-  for (const s of [-1, 1]) {
-    const loop = [];
-    for (let i = 0; i < 22; i++) { const t = i / 22 * TAU, x = -0.52 + Math.cos(t) * 0.5, y = -0.05 + Math.sin(t) * 0.3; const r = 0.2 * s; loop.push([s * (x * Math.cos(r) - y * Math.sin(r)) * -1, x * Math.sin(r) + y * Math.cos(r)]); }
-    fills.push({ pts: loop, col: C.terracota, dx: 0.04, dy: 0.03 });
-    strokes.push({ pts: closed(loop), w: 1 });
-    const fold = [];
-    for (let i = 0; i <= 8; i++) { const t = 0.6 + i / 8 * 1.6; fold.push([-s * -1 * (-0.52 + Math.cos(t) * 0.28) * -1 * 1, -0.05 + Math.sin(t) * 0.15]); }
-    strokes.push({ pts: fold.map(([x, y]) => [s * Math.abs(x) * 1, y]), w: 0.6 });
-    const tail = [[s * 0.08, 0.08], [s * 0.42, 0.95], [s * 0.3, 0.84], [s * 0.2, 0.98], [s * -0.02, 0.14]];
-    fills.push({ pts: tail, col: C.terracotaO, dx: 0.03, dy: 0.02 });
-    strokes.push({ pts: closed(tail), w: 0.9 });
-  }
-  const knot = blob(rng, 14, 0.16, 0.05, 3);
-  fills.push({ pts: knot, col: C.terracotaC, dx: 0.02, dy: 0.02 });
-  strokes.push({ pts: closed(knot), w: 1 });
-  return finish({ fills, strokes });
-}
-
-function pathPts(c, pts, R, ox, oy) {
-  c.beginPath();
-  c.moveTo(pts[0][0] * R + ox, pts[0][1] * R + oy);
-  for (let i = 1; i < pts.length; i++) c.lineTo(pts[i][0] * R + ox, pts[i][1] * R + oy);
-  c.closePath();
-}
-function drawDef(c, def, p, R, lw) {
-  const af = clamp01((p - 0.3) / 0.5);
-  if (af > 0) {
-    c.globalAlpha = af;
-    for (const f of def.fills) { c.fillStyle = f.col; pathPts(c, f.pts, R, f.dx * R, f.dy * R); c.fill(); }
-    c.globalAlpha = 1;
-  }
-  c.strokeStyle = C.tinta; c.lineCap = 'round'; c.lineJoin = 'round';
-  let rem = p * def.len;
-  for (const s of def.strokes) {
-    if (rem <= 0) break;
-    c.lineWidth = s.w * lw;
-    c.beginPath();
-    c.moveTo(s.pts[0][0] * R, s.pts[0][1] * R);
-    for (let i = 1; i < s.pts.length; i++) {
-      const L = s.seg[i - 1];
-      if (rem >= L) { c.lineTo(s.pts[i][0] * R, s.pts[i][1] * R); rem -= L; }
-      else { const u = rem / L, a = s.pts[i - 1], b = s.pts[i]; c.lineTo((a[0] + (b[0] - a[0]) * u) * R, (a[1] + (b[1] - a[1]) * u) * R); rem = 0; break; }
-    }
-    c.stroke();
-  }
-  const ad = clamp01((p - 0.8) / 0.2);
-  if (ad > 0 && def.dots.length) {
-    c.globalAlpha = ad;
-    for (const d of def.dots) { c.fillStyle = d.col; c.beginPath(); c.arc(d.x * R, d.y * R, d.r * R, 0, TAU); c.fill(); }
-    c.globalAlpha = 1;
-  }
-}
-function sprite(def, R, lw, w, h, ox, oy) {
-  const s = document.createElement('canvas');
-  s.width = Math.ceil(w); s.height = Math.ceil(h);
-  const c = s.getContext('2d');
-  c.translate(ox, oy);
-  drawDef(c, def, 1, R, lw);
-  return { cv: s, w: s.width, h: s.height, ox, oy };
-}
-
-/* ---------- Escena ---------- */
-let W = 0, H = 0, DPR = 1, S = 1, CX = 0, CY = 0, LWB = 1, papel = null;
-let FL = [], RAMAS = [], LAZO = null, ESTRELLAS = [];
-
-function crearEscena() {
-  const rng = rngF(20261125);
-  FL = [];
-  const defs = [['rosa', 0, 0.6, 0, 0.15]];
-  const t1 = ['ranunculo', 'rosa', 'margarita', 'rosa', 'ranunculo'];
-  for (let i = 0; i < 5; i++) { const a = i / 5 * TAU + 0.3; defs.push([t1[i], Math.cos(a) * 0.27, 0.44, Math.sin(a) * 0.27, 0.13]); }
-  const t2 = ['margarita', 'rosa', 'ranunculo', 'margarita', 'rosa', 'ranunculo'];
-  for (let i = 0; i < 6; i++) { const a = i / 6 * TAU + 0.3 + TAU / 12; defs.push([t2[i], Math.cos(a) * 0.46, 0.23, Math.sin(a) * 0.46, 0.125]); }
-  const order = [0, 1, 3, 5, 2, 4, 6, 8, 10, 7, 9, 11];
-  defs.forEach((d, i) => {
-    const c = [d[1], d[2], d[3]], r = d[4];
-    let nx = c[0], ny = c[1] + 0.6, nz = c[2];
-    { const l = Math.hypot(nx, ny, nz); nx /= l; ny /= l; nz /= l; }
-    const hxz = Math.hypot(c[0], c[2]), ex = hxz > 1e-6 ? c[0] / hxz : 0, ez = hxz > 1e-6 ? c[2] / hxz : 0;
-    const E = [ex * 0.035, -0.92, ez * 0.035], T = [ex * 0.025, Y_CINTA, ez * 0.025];
-    const B = [c[0] - nx * r * 0.7, c[1] - ny * r * 0.7, c[2] - nz * r * 0.7];
-    const pts = [E, T, B, c], cum = [0];
-    for (let k = 1; k < 4; k++) cum.push(cum[k - 1] + Math.hypot(pts[k][0] - pts[k - 1][0], pts[k][1] - pts[k - 1][1], pts[k][2] - pts[k - 1][2]));
-    const tipo = d[0];
-    const def = tipo === 'rosa' ? makeRosa(rng) : tipo === 'ranunculo' ? makeRanunculo(rng) : makeMargarita(rng);
-    const tl = T0 + order.indexOf(i) * STG;
-    const chispas = [];
-    for (let j = 0; j < 12; j++) chispas.push([rng() * TAU, 0.8 + rng() * 1.3, 1.2 + rng() * 1.8, [C.mostaza, C.terracota, C.salvia, C.tinta][j % 4]]);
-    FL.push({ tipo, c, r, n: [nx, ny, nz], rot: rng() * TAU, def, rev: makeReverso(tipo, rng), pts, cum, len: cum[3], stemLen: cum[2], tl, te: tl + ROCK, chispas, dashA: rng() * TAU });
-  });
-  RAMAS = [];
-  for (let j = 0; j < 7; j++) {
-    const a = j / 7 * TAU + 0.2 + jit(rng, 0.25), ca = Math.cos(a), sa = Math.sin(a);
-    RAMAS.push({ a: [ca * 0.28, 0.06, sa * 0.28], b: [ca * 0.74, -0.06 + jit(rng, 0.08), sa * 0.74], def: makeEuca(rng), t0: T_HOJA + j * 0.11 });
-  }
-  for (let j = 0; j < 5; j++) {
-    const a = j / 5 * TAU + 0.9 + jit(rng, 0.3), ca = Math.cos(a), sa = Math.sin(a);
-    RAMAS.push({ a: [ca * 0.3, 0.22, sa * 0.3], b: [ca * 0.62, 0.62 + jit(rng, 0.08), sa * 0.62], def: makeBaya(rng), t0: T_HOJA + 0.4 + j * 0.12 });
-  }
-  LAZO = makeLazo();
-  ESTRELLAS = [];
-  for (let k = 0; k < 40; k++) ESTRELLAS.push([rng(), rng(), rng(), rng()]);
-}
-
-function hacerPapel() {
-  papel = document.createElement('canvas');
-  papel.width = W; papel.height = H;
-  const c = papel.getContext('2d'), rng = rngF(7);
-  c.fillStyle = C.papel; c.fillRect(0, 0, W, H);
-  const n = Math.round(W * H / 700);
-  for (let i = 0; i < n; i++) {
-    c.fillStyle = rng() < 0.6 ? `rgba(59,42,30,${0.03 + rng() * 0.05})` : `rgba(255,255,255,${0.15 + rng() * 0.2})`;
-    const s = (0.6 + rng() * 1.4) * DPR;
-    c.fillRect(rng() * W, rng() * H, s, s);
-  }
-  c.strokeStyle = 'rgba(59,42,30,0.05)'; c.lineWidth = 0.7 * DPR;
-  for (let i = 0; i < 60; i++) {
-    const x = rng() * W, y = rng() * H, l = (8 + rng() * 26) * DPR, a = rng() * TAU;
-    c.beginPath(); c.moveTo(x, y); c.quadraticCurveTo(x + Math.cos(a + 0.6) * l * 0.5, y + Math.sin(a + 0.6) * l * 0.5, x + Math.cos(a) * l, y + Math.sin(a) * l); c.stroke();
-  }
-  const g = c.createRadialGradient(W / 2, H * 0.5, Math.min(W, H) * 0.25, W / 2, H * 0.5, Math.max(W, H) * 0.75);
-  g.addColorStop(0, 'rgba(59,42,30,0)'); g.addColorStop(1, 'rgba(59,42,30,0.13)');
-  c.fillStyle = g; c.fillRect(0, 0, W, H);
-}
-
-function hacerSprites() {
-  for (const f of FL) {
-    const R = f.r * S, sz = R * 2.6;
-    f.spr = sprite(f.def, R, LWB, sz, sz, sz / 2, sz / 2);
-    f.sprR = sprite(f.rev, R, LWB, sz, sz, sz / 2, sz / 2);
-  }
-  for (const r of RAMAS) {
-    const L0 = 0.48 * S;
-    r.L0 = L0;
-    r.spr = sprite(r.def, L0, LWB, L0 * 1.12 + 8 * DPR, L0 * 0.5, 4 * DPR, L0 * 0.25);
-  }
-  const RB = 0.11 * S;
-  LAZO.R = RB;
-  LAZO.spr = sprite(LAZO, RB, LWB, RB * 2.4, RB * 2.4, RB * 1.2, RB * 1.05);
-}
-
-function resize() {
-  DPR = Math.min(window.devicePixelRatio || 1, 3);
-  W = Math.round(window.innerWidth * DPR); H = Math.round(window.innerHeight * DPR);
-  cv.width = W; cv.height = H;
-  S = Math.min(H * 0.72 / 1.75, W * 0.84 / 1.3);
-  CX = W / 2; CY = H * 0.56 - 0.085 * S;
-  LWB = 1.45 * DPR * Math.max(0.85, Math.min(1.3, S / (240 * DPR)));
-  hacerPapel();
-  hacerSprites();
-}
-
-/* ---------- Dibujo por fotograma ---------- */
 function pathAt(f, L) {
   const p = f.pts, c = f.cum;
   let k = 0;
   while (k < 2 && c[k + 1] < L) k++;
-  const u = clamp01((L - c[k]) / ((c[k + 1] - c[k]) || 1)), a = p[k], b = p[k + 1];
+  const seg = c[k + 1] - c[k] || 1, u = clamp01((L - c[k]) / seg);
+  const a = p[k], b = p[k + 1];
   return [a[0] + (b[0] - a[0]) * u, a[1] + (b[1] - a[1]) * u, a[2] + (b[2] - a[2]) * u];
 }
 
-function dibujarTallo(f, L) {
-  const pts = [proj(...f.pts[0])];
-  for (let k = 1; k < 3; k++) {
-    if (f.cum[k] <= L) pts.push(proj(...f.pts[k]));
-    else { pts.push(proj(...pathAt(f, L))); break; }
-  }
-  if (f.cum[2] < L) { /* ya completo */ }
-  ctx.lineCap = 'round'; ctx.lineJoin = 'round';
-  ctx.strokeStyle = C.salvia; ctx.lineWidth = LWB * 2.2;
-  ctx.beginPath(); ctx.moveTo(pts[0].x + 1.2 * DPR, pts[0].y + 0.8 * DPR);
-  for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x + 1.2 * DPR, pts[i].y + 0.8 * DPR);
-  ctx.stroke();
-  ctx.strokeStyle = C.tinta; ctx.lineWidth = LWB * 0.85;
-  ctx.beginPath(); ctx.moveTo(pts[0].x, pts[0].y);
-  for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
-  ctx.stroke();
-}
+/* ---------- Construcción del modelo 3D (nube de puntos) ---------- */
+function build() {
+  const rng = rngF(20261124);
+  const A = { x: [], y: [], z: [], nx: [], ny: [], nz: [], ramp: [], shift: [], kind: [], grp: [], par: [], dx: [], dy: [], dz: [], rb: [] };
+  const add = (x, y, z, nx, ny, nz, ramp, shift, kind, grp, par, dx = 0, dy = 0, dz = 0, rb = 0) => {
+    A.x.push(x); A.y.push(y); A.z.push(z); A.nx.push(nx); A.ny.push(ny); A.nz.push(nz);
+    A.ramp.push(ramp); A.shift.push(shift); A.kind.push(kind); A.grp.push(grp); A.par.push(par);
+    A.dx.push(dx); A.dy.push(dy); A.dz.push(dz); A.rb.push(rb);
+  };
+  const runit = () => { const z = rng() * 2 - 1, a = rng() * TAU, r = Math.sqrt(1 - z * z); return [r * Math.cos(a), r * Math.sin(a), z]; };
+  const step = 0.6 / SS;
 
-function dibujarFlor(f, t) {
-  const P = proj(...f.c), N = rotN(...f.n);
-  const p = clamp01((t - f.te - 0.1) / DRAW);
-  if (p <= 0) return;
-  const fac = 0.5 + 0.5 * Math.abs(N[2]);
-  const th = Math.atan2(-N[1], N[0]);
-  ctx.save();
-  ctx.translate(P.x, P.y);
-  ctx.rotate(th); ctx.scale(fac, 1); ctx.rotate(-th + f.rot);
-  if (p < 1) drawDef(ctx, f.def, p, f.r * S * P.k, LWB);
-  else {
-    const s = N[2] < -0.3 ? f.sprR : f.spr;
-    ctx.drawImage(s.cv, -s.ox * P.k, -s.oy * P.k, s.w * P.k, s.h * P.k);
-  }
-  ctx.restore();
-}
+  /* Flores */
+  const defs = [[0, 0.6, 0, 0.15, BUR]];
+  const t1 = [CRE, BUR, BLU, BUR, CRE];
+  for (let i = 0; i < 5; i++) { const a = i / 5 * TAU + 0.3; defs.push([Math.cos(a) * 0.26, 0.44, Math.sin(a) * 0.26, 0.14, t1[i]]); }
+  const t2 = [BUR, CRE, BLU, BUR, CRE, BLU];
+  for (let i = 0; i < 6; i++) { const a = i / 6 * TAU + 0.3 + TAU / 12; defs.push([Math.cos(a) * 0.46, 0.24, Math.sin(a) * 0.46, 0.135, t2[i]]); }
+  const order = [0, 1, 3, 5, 2, 4, 6, 8, 10, 7, 9];
+  const GA = Math.PI * (3 - Math.sqrt(5));
 
-function dibujarRama(r, t) {
-  const g = eo2(clamp01((t - r.t0) / 0.7));
-  if (g <= 0) return;
-  const A = proj(...r.a), B = proj(...r.b);
-  const dx = B.x - A.x, dy = B.y - A.y, len = Math.hypot(dx, dy);
-  if (len < 1) return;
-  const sc = len / r.L0;
-  ctx.save();
-  ctx.translate(A.x, A.y); ctx.rotate(Math.atan2(dy, dx)); ctx.scale(sc, sc);
-  if (g < 1) drawDef(ctx, r.def, g, r.L0, LWB / sc);
-  else ctx.drawImage(r.spr.cv, -r.spr.ox, -r.spr.oy);
-  ctx.restore();
-}
+  FL = [];
+  defs.forEach((d, i) => {
+    const c = [d[0], d[1], d[2]], r = d[3];
+    let nx = c[0], ny = c[1] - 0.1, nz = c[2];
+    { const l = Math.hypot(nx, ny, nz); nx /= l; ny /= l; nz /= l; }
+    let rx = 0, ry = 1, rz = 0; if (Math.abs(ny) > 0.9) { rx = 1; ry = 0; }
+    let ux = ny * rz - nz * ry, uy = nz * rx - nx * rz, uz = nx * ry - ny * rx;
+    { const l = Math.hypot(ux, uy, uz); ux /= l; uy /= l; uz /= l; }
+    const vx = ny * uz - nz * uy, vy = nz * ux - nx * uz, vz = nx * uy - ny * ux;
+    const hxz = Math.hypot(c[0], c[2]);
+    const ex = hxz > 1e-6 ? c[0] / hxz : 0, ez = hxz > 1e-6 ? c[2] / hxz : 0;
+    const E = [ex * 0.035, -0.9, ez * 0.035], T = [ex * 0.022, -0.43, ez * 0.022];
+    const B = [c[0] - nx * r * 0.8, c[1] - ny * r * 0.8, c[2] - nz * r * 0.8];
+    const pts = [E, T, B, c], cum = [0];
+    for (let k = 1; k < 4; k++) cum.push(cum[k - 1] + Math.hypot(pts[k][0] - pts[k - 1][0], pts[k][1] - pts[k - 1][1], pts[k][2] - pts[k - 1][2]));
+    const tl = T0 + order.indexOf(i) * STG;
+    const f = { c, r, type: d[4], pts, cum, len: cum[3], stemLen: cum[2], tl, te: tl + ROCK, gl: new Float32Array(GL * 5) };
+    for (let j = 0; j < GL; j++) {
+      const u = runit(), o = j * 5;
+      f.gl[o] = u[0]; f.gl[o + 1] = u[1]; f.gl[o + 2] = u[2];
+      f.gl[o + 3] = 0.3 + 0.45 * rng(); f.gl[o + 4] = 0.7 + 0.8 * rng();
+    }
+    FL.push(f);
 
-function aro(y0fn, rfn, n) {
-  const out = [];
-  for (let i = 0; i < n; i++) {
-    const th = i / n * TAU, y = y0fn(th), r = rfn(y, th);
-    const P = proj(Math.cos(th) * r, y, Math.sin(th) * r);
-    P.th = th; out.push(P);
-  }
-  return out;
-}
-function envolvente(pts) {
-  const p = pts.slice().sort((a, b) => a.x - b.x || a.y - b.y);
-  const cr = (o, a, b) => (a.x - o.x) * (b.y - o.y) - (a.y - o.y) * (b.x - o.x);
-  const lo = [], up = [];
-  for (const q of p) { while (lo.length >= 2 && cr(lo[lo.length - 2], lo[lo.length - 1], q) <= 0) lo.pop(); lo.push(q); }
-  for (let i = p.length - 1; i >= 0; i--) { const q = p[i]; while (up.length >= 2 && cr(up[up.length - 2], up[up.length - 1], q) <= 0) up.pop(); up.push(q); }
-  return lo.slice(0, -1).concat(up.slice(0, -1));
-}
-function arcoFrontal(pts) {
-  const n = pts.length;
-  let i0 = -1;
-  for (let i = 0; i < n; i++) if (pts[(i - 1 + n) % n].z < 0 && pts[i].z >= 0) { i0 = i; break; }
-  if (i0 < 0) return pts.slice();
-  const arc = [];
-  for (let k = 0; k < n; k++) { const q = pts[(i0 + k) % n]; if (q.z < 0) break; arc.push(q); }
-  return arc;
-}
+    // superficie de la rosa
+    const N = Math.max(80, Math.ceil(4 * Math.PI * (r * SS) * (r * SS) * 2.3));
+    for (let k = 0; k < N; k++) {
+      const h = 1 - 2 * (k + 0.5) / N, rr = Math.sqrt(1 - h * h), th = k * GA;
+      const a = Math.cos(th) * rr, b = Math.sin(th) * rr;
+      const rad = r * (1 + 0.07 * Math.sin(th * 5 + h * 4));
+      const hs = h < 0 ? h * 0.78 : h * 0.9;
+      const la = a * rad, lb = b * rad, lh = hs * rad;
+      const px = c[0] + ux * la + vx * lb + nx * lh;
+      const py = c[1] + uy * la + vy * lb + ny * lh;
+      const pz = c[2] + uz * la + vz * lb + nz * lh;
+      const mx = ux * a + vx * b + nx * h, my = uy * a + vy * b + ny * h, mz = uz * a + vz * b + nz * h;
+      let ramp = d[4], sh = 0;
+      if (h > 0) {
+        const rp = 1 - h;
+        const ring = Math.sqrt(rp) * 4.6 + 0.45 * Math.sin(th * 3 + rp * 9);
+        const fr = ring - Math.floor(ring);
+        if (rp < 0.05 || fr < 0.16) sh = -2; else if (fr < 0.3) sh = -1; else if (fr > 0.86) sh = 1;
+      } else if (h < -0.5) {
+        ramp = LEAF; sh = Math.sin(th * 5) > 0.3 ? 0 : -1;
+      } else {
+        const fr = ((th * 5 / TAU + h * 0.5) % 1 + 1) % 1;
+        if (fr < 0.12) sh = -1;
+      }
+      const ru = runit();
+      let bx = ru[0] + mx * 0.7, by = ru[1] + my * 0.7, bz = ru[2] + mz * 0.7;
+      const bl = Math.hypot(bx, by, bz) || 1; bx /= bl; by /= bl; bz /= bl;
+      add(px, py, pz, mx, my, mz, ramp, sh, K_FL, i, 0, bx, by, bz, 0.2 + 0.26 * rng());
+    }
+    // tallo (rastro del cohete)
+    const sst = 0.45 / SS, sh = (i % 3 === 0) ? 1 : 0;
+    for (let L = 0; L < f.stemLen; L += sst) { const p = pathAt(f, L); add(p[0], p[1], p[2], 0, 0, 1, STEM, sh, K_STEM, i, L); }
+  });
 
-let conoCache = null;
-function calcularCono() {
-  const N = 84;
-  const top = aro(yTop, (y, th) => coneR(y) * (1 + 0.035 * Math.sin(th * 9)), N);
-  const bot = aro(() => YB, () => R0, N);
-  conoCache = { top, bot, hull: envolvente(top.concat(bot)), N };
-}
-function clipCono(q) {
-  if (q >= 1) return;
-  const yb = proj(0, YB - 0.05, 0).y, yt = proj(0, 0.3, 0).y;
-  const y = yb + (yt - yb) * eo2(q);
-  ctx.beginPath(); ctx.rect(0, y, W, H - y); ctx.clip();
-}
-function dibujarConoInterior(q) {
-  const { hull } = conoCache;
-  ctx.save(); clipCono(q);
-  ctx.fillStyle = C.salvia;
-  ctx.beginPath(); ctx.moveTo(hull[0].x, hull[0].y);
-  for (const p of hull) ctx.lineTo(p.x, p.y);
-  ctx.closePath(); ctx.fill();
-  ctx.strokeStyle = 'rgba(59,42,30,0.25)'; ctx.lineWidth = LWB * 0.6;
-  for (let i = 0; i < hull.length; i += 3) { const p = hull[i]; ctx.beginPath(); ctx.moveTo(p.x, p.y); ctx.lineTo(p.x + (CX - p.x) * 0.12, p.y + 18 * DPR); ctx.stroke(); }
-  ctx.restore();
-}
-function dibujarConoFrente(q) {
-  const { top, bot, N } = conoCache;
-  const arc = arcoFrontal(top);
-  if (arc.length < 2) return;
-  const idx = arc.map((p) => Math.round(p.th / TAU * N) % N);
-  const barc = idx.map((i) => bot[i]);
-  ctx.save(); clipCono(q);
-  ctx.lineCap = 'round'; ctx.lineJoin = 'round';
-  // relleno con leve desajuste de registro
-  ctx.fillStyle = C.kraft;
-  ctx.beginPath(); ctx.moveTo(arc[0].x + 2 * DPR, arc[0].y + 1.5 * DPR);
-  for (const p of arc) ctx.lineTo(p.x + 2 * DPR, p.y + 1.5 * DPR);
-  for (let i = barc.length - 1; i >= 0; i--) ctx.lineTo(barc[i].x + 2 * DPR, barc[i].y + 1.5 * DPR);
-  ctx.closePath(); ctx.fill();
-  // sombra a la derecha (la luz viene de la izquierda)
-  const mid = Math.floor(arc.length * 0.62);
-  ctx.fillStyle = 'rgba(150,110,60,0.18)';
-  ctx.beginPath(); ctx.moveTo(arc[mid].x, arc[mid].y);
-  for (let i = mid; i < arc.length; i++) ctx.lineTo(arc[i].x, arc[i].y);
-  for (let i = barc.length - 1; i >= mid; i--) ctx.lineTo(barc[i].x, barc[i].y);
-  ctx.closePath(); ctx.fill();
-  // pliegues
-  ctx.strokeStyle = 'rgba(59,42,30,0.55)'; ctx.lineWidth = LWB * 0.7;
-  for (let k = 0; k < 16; k++) {
-    const th = ((k / 16) * TAU + 0.15) % TAU, i = Math.round(th / TAU * N) % N;
-    const a = top[i], b = bot[i];
-    if (a.z < 0.02 || b.z < -0.05) continue;
-    ctx.beginPath(); ctx.moveTo(a.x, a.y);
-    ctx.quadraticCurveTo((a.x + b.x) / 2 + 3 * DPR, (a.y + b.y) / 2, b.x, b.y); ctx.stroke();
-  }
-  // trama de sombreado
-  ctx.strokeStyle = 'rgba(59,42,30,0.35)'; ctx.lineWidth = LWB * 0.5;
-  for (let i = mid; i < arc.length - 1; i += 2) {
-    const a = arc[i], b = barc[i];
-    for (let s = 0.25; s < 0.95; s += 0.17) {
-      const x = a.x + (b.x - a.x) * s, y = a.y + (b.y - a.y) * s;
-      ctx.beginPath(); ctx.moveTo(x - 4 * DPR, y - 3 * DPR); ctx.lineTo(x + 4 * DPR, y + 3 * DPR); ctx.stroke();
+  /* Hojas */
+  for (let j = 0; j < 7; j++) {
+    const ang = j / 7 * TAU + 0.15 + (rng() - 0.5) * 0.3;
+    const dx = Math.cos(ang), dz = Math.sin(ang);
+    const base = [dx * 0.26, 0.1, dz * 0.26];
+    const tip = [dx * 0.72, -0.02 + rng() * 0.08, dz * 0.72];
+    let ax = tip[0] - base[0], ay = tip[1] - base[1], az = tip[2] - base[2];
+    const L = Math.hypot(ax, ay, az); ax /= L; ay /= L; az /= L;
+    let wx = -az, wz = ax; { const l = Math.hypot(wx, wz); wx /= l; wz /= l; }
+    let mx = -wz * ay, my = wz * ax - wx * az, mz = wx * ay;
+    { const l = Math.hypot(mx, my, mz); mx /= l; my /= l; mz /= l; if (my < 0) { mx = -mx; my = -my; mz = -mz; } }
+    const W = 0.085;
+    const ns = Math.ceil(L * SS / 0.5), nt = Math.ceil(2 * W * SS / 0.5);
+    for (let si = 0; si <= ns; si++) {
+      const s = si / ns, wid = Math.sin(Math.PI * Math.pow(s, 0.75));
+      for (let ti = 0; ti <= nt; ti++) {
+        const tt = (ti / nt) * 2 - 1;
+        const off = tt * W * wid, cup = 0.02 * tt * tt;
+        const x = base[0] + ax * L * s + wx * off + mx * cup;
+        const y = base[1] + ay * L * s - 0.07 * s * s + my * cup;
+        const z = base[2] + az * L * s + wz * off + mz * cup;
+        let sh = 0;
+        const vein = (s * 6 - Math.abs(tt) * 1.5) % 1;
+        if (Math.abs(tt) < 0.12) sh = -1; else if (vein > 0 && vein < 0.1) sh = -1;
+        const tw = -tt * 0.35;
+        add(x, y, z, mx + wx * tw, my, mz + wz * tw, LEAF, sh, K_LEAF, j, s);
+      }
     }
   }
-  // contorno a tinta
-  ctx.strokeStyle = C.tinta; ctx.lineWidth = LWB * 1.15;
-  ctx.beginPath(); ctx.moveTo(barc[0].x, barc[0].y);
-  for (const p of arc) ctx.lineTo(p.x, p.y);
-  for (let i = barc.length - 1; i >= 0; i--) ctx.lineTo(barc[i].x, barc[i].y);
-  ctx.stroke();
-  ctx.restore();
-}
-function dibujarBordeTrasero(q) {
-  const { top } = conoCache;
-  ctx.save(); clipCono(q);
-  ctx.strokeStyle = C.tinta; ctx.lineWidth = LWB * 0.8; ctx.lineJoin = 'round';
-  ctx.beginPath();
-  let on = false;
-  for (let k = 0; k <= top.length; k++) {
-    const p = top[k % top.length];
-    if (p.z < 0) { if (!on) { ctx.moveTo(p.x, p.y); on = true; } else ctx.lineTo(p.x, p.y); } else on = false;
+
+  /* Paniculata (puntitos crema) */
+  BABYT = [];
+  for (let k = 0; k < 30; k++) {
+    const yy = 0.15 + rng() * 0.75, a = rng() * TAU, rr = Math.sqrt(1 - yy * yy);
+    const dist = 0.6 + rng() * 0.1;
+    const cx = rr * Math.cos(a) * dist, cy = 0.08 + yy * dist, cz = rr * Math.sin(a) * dist;
+    const m = 4 + Math.floor(rng() * 4);
+    for (let q = 0; q < m; q++) {
+      const u = runit(), s = 0.03 * rng();
+      add(cx + u[0] * s, cy + u[1] * s, cz + u[2] * s, 0, 1, 0, CRE, rng() < 0.5 ? 5 : 6, K_BABY, k, 0);
+    }
+    BABYT.push(T_BABY + rng() * 1.1);
   }
-  ctx.stroke();
-  ctx.restore();
-}
-function dibujarCinta(t) {
-  const q = clamp01((t - T_CINTA) / D_CINTA);
-  if (q <= 0) return;
-  const r = coneR(Y_CINTA) * 1.05 + 0.012, n = 72, pts = [];
-  for (let i = 0; i <= n; i++) {
-    const th = i / n * TAU, dd = Math.abs(((th - Math.PI / 2 + 3 * Math.PI) % TAU) - Math.PI);
-    const P = proj(Math.cos(th) * r, Y_CINTA, Math.sin(th) * r);
-    P.ok = P.z >= -0.01 && dd <= q * Math.PI + 0.01;
-    pts.push(P);
-  }
-  const bw = 0.045 * S;
-  const tramos = [];
-  let cur = null;
-  for (const p of pts) { if (p.ok) { if (!cur) { cur = []; tramos.push(cur); } cur.push(p); } else cur = null; }
-  ctx.lineCap = 'round'; ctx.lineJoin = 'round';
-  for (const tr of tramos) {
-    if (tr.length < 2) continue;
-    ctx.strokeStyle = C.terracota; ctx.lineWidth = bw * tr[0].k;
-    ctx.beginPath(); ctx.moveTo(tr[0].x + 1.5 * DPR, tr[0].y + DPR); for (const p of tr) ctx.lineTo(p.x + 1.5 * DPR, p.y + DPR); ctx.stroke();
-    ctx.strokeStyle = C.tinta; ctx.lineWidth = LWB * 0.9;
-    for (const s of [-0.5, 0.5]) {
-      ctx.beginPath(); ctx.moveTo(tr[0].x, tr[0].y + s * bw); for (const p of tr) ctx.lineTo(p.x, p.y + s * bw * p.k); ctx.stroke();
+
+  /* Papel del ramo (cono plisado: fuera crema, dentro burdeos) */
+  for (let y = YB; y <= YMAX; y += step) {
+    const r = coneR(y);
+    const n = Math.max(12, Math.ceil(TAU * r * 1.04 * SS / 0.6));
+    for (let j = 0; j < n; j++) {
+      const th = j / n * TAU, top = yTop(th);
+      if (y > top) continue;
+      const c = Math.cos(th), s = Math.sin(th);
+      const pr = r * (1 + 0.04 * Math.sin(th * 9));
+      const pl = 0.5 * Math.cos(th * 9);
+      let nx = c - s * pl, ny = -SLOPE, nz = s + c * pl;
+      const l = Math.hypot(nx, ny, nz); nx /= l; ny /= l; nz /= l;
+      add(c * pr, y, s * pr, nx, ny, nz, PAPER, (top - y < 0.02) ? 2 : 1, K_WRAP, 0, y);
     }
   }
-}
-function dibujarLazo(t) {
-  if (t < T_LAZO) return;
-  const u = clamp01((t - T_LAZO) / D_LAZO), s = u < 1 ? Math.max(0, backOut(u)) : 1;
-  const r = coneR(Y_CINTA) * 1.05 + 0.03;
-  const P = proj(0, Y_CINTA, r), N = rotN(0, 0, 1);
-  if (N[2] < 0.12) return;
-  const sp = LAZO.spr;
-  ctx.save();
-  ctx.translate(P.x, P.y);
-  ctx.scale(N[2] * s * P.k, s * P.k);
-  ctx.drawImage(sp.cv, -sp.ox, -sp.oy);
-  ctx.restore();
+
+  /* Cinta */
+  for (let y = -0.47; y <= -0.40; y += step) {
+    const r = coneR(y) * 1.045 + 0.012;
+    const n = Math.ceil(TAU * r * SS / 0.6);
+    const edge = (y < -0.46 || y > -0.41) ? -1 : 0;
+    for (let j = 0; j < n; j++) {
+      const th = j / n * TAU, c = Math.cos(th), s = Math.sin(th);
+      add(c * r, y, s * r, c, -0.15, s, BUR, edge, K_RIB, 0, th);
+    }
+  }
+
+  /* Lazo */
+  BC = [0, -0.435, coneR(-0.435) * 1.045 + 0.035];
+  for (const sg of [-1, 1]) {
+    const cx = BC[0] + sg * 0.072, cy = BC[1] + 0.016, rx = 0.072, ry = 0.04, tilt = 0.25 * sg;
+    const ctl = Math.cos(tilt), stl = Math.sin(tilt);
+    const nph = Math.ceil(TAU * 0.06 * SS / 0.5), nw = Math.ceil(0.044 * SS / 0.5);
+    for (let k = 0; k < nph; k++) {
+      const ph = k / nph * TAU, ex = rx * Math.cos(ph), ey = ry * Math.sin(ph);
+      const ox = ex * ctl - ey * stl, oy = ex * stl + ey * ctl;
+      let nx = Math.cos(ph) / rx, ny = Math.sin(ph) / ry;
+      { const l = Math.hypot(nx, ny); nx /= l; ny /= l; }
+      const rnx = nx * ctl - ny * stl, rny = nx * stl + ny * ctl;
+      for (let w = 0; w <= nw; w++) {
+        const wz = (w / nw) * 0.044 - 0.022;
+        add(cx + ox, cy + oy, BC[2] + wz + 0.01 * Math.cos(ph) * sg, rnx, rny, 0.2, BUR, Math.abs(wz) > 0.017 ? -1 : 0, K_BOW, 0, 0);
+      }
+    }
+    // colas
+    const ax0 = BC[0] + sg * 0.01, ay0 = BC[1] - 0.01, az0 = BC[2] + 0.005;
+    let tx = sg * 0.075, ty = -0.19;
+    const TL = Math.hypot(tx, ty); tx /= TL; ty /= TL;
+    const sx = -ty, sy = tx;
+    const ns = Math.ceil(TL * SS / 0.5), nw2 = Math.ceil(0.034 * SS / 0.5);
+    for (let k = 0; k <= ns; k++) {
+      const s = k / ns;
+      for (let w = 0; w <= nw2; w++) {
+        const ww = (w / nw2) * 2 - 1;
+        if (s > 1 - 0.1 * (1 - Math.abs(ww))) continue; // corte en V
+        const half = 0.017 * (1 + 0.3 * s);
+        add(ax0 + tx * TL * s + sx * ww * half, ay0 + ty * TL * s + sy * ww * half, az0 + 0.015 * Math.sin(s * 5),
+            sg * 0.3 + 0.3 * Math.cos(s * 5), 0.1, 1, BUR, Math.abs(ww) > 0.8 ? -1 : 0, K_BOW, 0, 0);
+      }
+    }
+  }
+  { // nudo
+    const rk = 0.024, N = Math.max(40, Math.ceil(4 * Math.PI * (rk * SS) * (rk * SS) * 2.5));
+    for (let k = 0; k < N; k++) {
+      const h = 1 - 2 * (k + 0.5) / N, rr = Math.sqrt(1 - h * h), th = k * GA;
+      const x = Math.cos(th) * rr, y = Math.sin(th) * rr * 0.8, z = h;
+      add(BC[0] + x * rk, BC[1] + y * rk, BC[2] + 0.012 + z * rk, x, y, z, BUR, 1, K_BOW, 0, 0);
+    }
+  }
+
+  NP = A.x.length;
+  PX = Float32Array.from(A.x); PY = Float32Array.from(A.y); PZ = Float32Array.from(A.z);
+  NX = Float32Array.from(A.nx); NY = Float32Array.from(A.ny); NZ = Float32Array.from(A.nz);
+  RAMP = Uint8Array.from(A.ramp); SHIFT = Int8Array.from(A.shift); KIND = Uint8Array.from(A.kind);
+  GRP = Uint16Array.from(A.grp); PAR = Float32Array.from(A.par);
+  DX = Float32Array.from(A.dx); DY = Float32Array.from(A.dy); DZ = Float32Array.from(A.dz); RB = Float32Array.from(A.rb);
+  H1 = new Float32Array(NP); H2 = new Float32Array(NP);
+  for (let i = 0; i < NP; i++) { H1[i] = rng(); H2[i] = rng(); }
 }
 
-function dibujarCohete(f, t, fi) {
-  const u = (t - f.tl) / ROCK;
-  const L = eo2(u) * f.len;
-  const pos = proj(...pathAt(f, L));
-  ctx.fillStyle = C.tinta;
-  for (let k = 1; k <= 5; k++) {
-    const uk = u - k * 0.03; if (uk < 0) break;
-    const q = proj(...pathAt(f, eo2(uk) * f.len));
-    const h = Math.sin(fi * 31 + k * 7 + t * 40);
-    ctx.globalAlpha = 0.7 - k * 0.12;
-    ctx.beginPath(); ctx.arc(q.x + h * 3 * DPR, q.y + 2 * DPR * k * 0.4, (1.6 - k * 0.2) * DPR, 0, TAU); ctx.fill();
+/* ---------- Tamaño (píxeles enteros en pantalla) ---------- */
+function resize() {
+  const dpr = Math.min(window.devicePixelRatio || 1, 4);
+  const vw = window.innerWidth, vh = window.innerHeight;
+  const dw = vw * dpr, dh = vh * dpr;
+  PXS = Math.max(2, Math.round(Math.min(dw / 134, dh / 215)));
+  LW = Math.ceil(dw / PXS); LH = Math.ceil(dh / PXS);
+  cv.width = LW; cv.height = LH;
+  cv.style.width = (LW * PXS / dpr) + 'px';
+  cv.style.height = (LH * PXS / dpr) + 'px';
+  SS = Math.min(LH * 0.72 / 1.75, LW * 0.8 / 1.3);
+  CX = LW / 2; CY = LH * 0.56 - 0.065 * SS;
+  img = ctx.createImageData(LW, LH);
+  BUF = new Uint32Array(img.data.buffer);
+  ZB = new Float32Array(LW * LH);
+  V0 = new Float32Array(LW * LH); G0 = new Float32Array(LW * LH);
+  const gx = CX, gy = CY - 0.15 * SS, gr = SS * 1.45;
+  for (let y = 0; y < LH; y++) for (let x = 0; x < LW; x++) {
+    const i = y * LW + x;
+    V0[i] = 0.1 + 0.16 * (y / LH);
+    const d = Math.hypot(x - gx, (y - gy) * 0.85) / gr, g = Math.max(0, 1 - d);
+    G0[i] = g * g * 0.5;
   }
-  ctx.globalAlpha = 1;
-  ctx.fillStyle = C.mostaza; ctx.beginPath(); ctx.arc(pos.x, pos.y, 3.4 * DPR, 0, TAU); ctx.fill();
-  ctx.strokeStyle = C.tinta; ctx.lineWidth = LWB * 0.9; ctx.stroke();
+  const srng = rngF(77);
+  STARS = [];
+  const ns = Math.round(LW * LH / 140);
+  for (let k = 0; k < ns; k++) STARS.push([(srng() * LW) | 0, (srng() * LH * 0.85) | 0, srng() * TAU, 0.6 + srng() * 2.2, srng() < 0.08]);
+  build();
 }
-function dibujarEstallido(f, t) {
-  const tau = t - f.te;
-  if (tau < 0 || tau > 1) return;
-  const P = proj(...f.c), R = f.r * S * P.k;
-  ctx.lineCap = 'round';
-  if (tau < BURST) {
-    const u = tau / BURST, e = eo3(u);
-    ctx.strokeStyle = C.tinta; ctx.lineWidth = LWB * (1.1 - 0.5 * u);
-    ctx.globalAlpha = 1 - u * u;
-    for (let j = 0; j < 16; j++) {
-      const a = f.dashA + j / 16 * TAU, r1 = R * (0.3 + 1.1 * e), r2 = R * (0.5 + 1.55 * e) * (1 - 0.25 * u);
-      ctx.beginPath(); ctx.moveTo(P.x + Math.cos(a) * r1, P.y + Math.sin(a) * r1); ctx.lineTo(P.x + Math.cos(a) * r2, P.y + Math.sin(a) * r2); ctx.stroke();
+
+/* ---------- Dibujo ---------- */
+let PIX = 0, PIY = 0, PZV = 0;
+function plot3(x, y, z, col) {
+  const X1 = x * CA + z * SA, Z1 = z * CA - x * SA;
+  const Y2 = y * CT - Z1 * ST, Z2 = y * ST + Z1 * CT;
+  const k = FOC / (FOC - Z2);
+  const sx = CX + X1 * SS * k, sy = CY - (Y2 + BOB) * SS * k;
+  if (sx < 0 || sy < 0 || sx >= LW || sy >= LH) return false;
+  const ix = sx | 0, iy = sy | 0, zi = iy * LW + ix;
+  PIX = ix; PIY = iy; PZV = Z2;
+  if (Z2 > ZB[zi]) { ZB[zi] = Z2; BUF[zi] = col; }
+  return true;
+}
+function plotS(ix, iy, z, col) {
+  if (ix < 0 || iy < 0 || ix >= LW || iy >= LH) return;
+  const zi = iy * LW + ix;
+  if (z >= ZB[zi]) { ZB[zi] = z; BUF[zi] = col; }
+}
+function cross(ix, iy, z, cc, ce, r) {
+  plotS(ix, iy, z, cc);
+  for (let k = 1; k <= r; k++) { const c = k === 1 ? ce : SP[2]; plotS(ix + k, iy, z, c); plotS(ix - k, iy, z, c); plotS(ix, iy + k, z, c); plotS(ix, iy - k, z, c); }
+}
+
+function drawBG(t, glow) {
+  const R = RAMPS[BGR], n1 = R.length - 1;
+  for (let y = 0; y < LH; y++) {
+    const row = y * LW, by = (y & 3) << 2;
+    for (let x = 0; x < LW; x++) {
+      const i = row + x;
+      let idx = ((V0[i] + glow * G0[i]) * n1 + BAY[by | (x & 3)]) | 0;
+      if (idx > n1) idx = n1;
+      BUF[i] = R[idx];
     }
-    ctx.globalAlpha = 1;
   }
-  const e2 = 1 - Math.exp(-4 * tau);
-  for (const [a, d, rr, col] of f.chispas) {
-    const al = 1 - tau / 0.95; if (al <= 0) continue;
-    ctx.globalAlpha = al;
-    ctx.fillStyle = col;
-    ctx.beginPath(); ctx.arc(P.x + Math.cos(a) * R * d * e2, P.y + Math.sin(a) * R * d * e2 + R * 0.6 * tau * tau, rr * DPR, 0, TAU); ctx.fill();
+  const C = RAMPS[CRE];
+  for (const s of STARS) {
+    const v = Math.sin(t * s[3] + s[2]);
+    if (v < 0.1) continue;
+    const i = s[1] * LW + s[0];
+    if (s[4] && v > 0.85) {
+      BUF[i] = C[5];
+      if (s[0] > 0) BUF[i - 1] = C[1]; if (s[0] < LW - 1) BUF[i + 1] = C[1];
+      if (s[1] > 0) BUF[i - LW] = C[1]; if (s[1] < LH - 1) BUF[i + LW] = C[1];
+    } else BUF[i] = v > 0.7 ? C[2] : C[1];
   }
-  ctx.globalAlpha = 1;
 }
-function dibujarAmbiente(t) {
+
+function ambient(t) {
   if (t < T_ROT) return;
-  const per = 2.4, base = T_ROT + 0.4, kmax = Math.floor((t - base) / per);
-  for (let k = Math.max(0, kmax - 1); k <= kmax; k++) {
-    const tau = t - (base + k * per); if (tau < 0 || tau > 1.3) continue;
-    const e = ESTRELLAS[k % ESTRELLAS.length];
-    const lado = k % 2 ? 1 : -1;
-    const x = W * 0.5 + lado * W * (0.22 + e[0] * 0.18), y = H * (0.2 + e[1] * 0.08), R = S * 0.09;
-    const u = clamp01(tau / 0.7), ee = eo3(u);
-    ctx.globalAlpha = 0.55 * (1 - clamp01((tau - 0.5) / 0.8));
-    ctx.strokeStyle = C.tinta; ctx.lineWidth = LWB * 0.7; ctx.lineCap = 'round';
-    for (let j = 0; j < 12; j++) {
-      const a = j / 12 * TAU + e[2] * 3, r1 = R * (0.25 + 0.8 * ee), r2 = R * (0.45 + 1.15 * ee);
-      ctx.beginPath(); ctx.moveTo(x + Math.cos(a) * r1, y + Math.sin(a) * r1); ctx.lineTo(x + Math.cos(a) * r2, y + Math.sin(a) * r2); ctx.stroke();
+  const base = T_ROT + 0.2, per = 1.6, fno = (t * 30) | 0;
+  const kmax = Math.floor((t - base) / per);
+  for (let k = Math.max(0, kmax - 2); k <= kmax; k++) {
+    const dt = t - (base + k * per);
+    if (dt < 0 || dt > 2.4) continue;
+    const side = k % 2 ? 1 : -1;
+    const tx = LW * 0.5 + side * (LW * 0.18 + ih(k, 1) * LW * 0.24);
+    const ty = LH * (0.07 + ih(k, 2) * 0.16);
+    const x0 = tx - side * LW * 0.06, y0 = LH + 2;
+    const R = RAMPS[[BUR, CRE, BLU][k % 3]], n1 = R.length - 1;
+    if (dt < 0.7) {
+      for (let j = 0; j < 5; j++) {
+        const u = dt / 0.7 - j * 0.035; if (u < 0) break;
+        const e = eo2(u);
+        plotS((x0 + (tx - x0) * e) | 0, (y0 + (ty - y0) * e) | 0, -50, j === 0 ? SP[1] : SP[Math.min(5, j + 1)]);
+      }
+    } else {
+      const tau = dt - 0.7, life = 1.6, age = tau / life;
+      if (age > 1) continue;
+      const Rr = Math.min(LW, LH) * 0.13;
+      if (tau < 0.08) cross(tx | 0, ty | 0, -50, SP[0], SP[1], 2);
+      for (let j = 0; j < 34; j++) {
+        if (age > 0.45 && ih(j + k * 97, fno) < age - 0.35) continue;
+        const ang = j / 34 * TAU + ih(k, 3) * 6, sp = 0.55 + 0.45 * ih(k * 97 + j, 3);
+        const ca = Math.cos(ang), sa = Math.sin(ang);
+        const ci = Math.min(n1, (age * n1 * 1.2) | 0);
+        for (let q = 0; q < 3; q++) {
+          const tq = tau - q * 0.05; if (tq < 0) break;
+          const dist = Rr * sp * (1 - Math.exp(-3.5 * tq));
+          plotS((tx + ca * dist) | 0, (ty + sa * dist + 7 * tq * tq) | 0, -50 - q, R[Math.max(0, n1 - ci - q * 2)]);
+        }
+      }
     }
-    ctx.fillStyle = [C.mostaza, C.terracota, C.salvia][k % 3];
-    for (let j = 0; j < 6; j++) {
-      const a = j / 6 * TAU + e[3] * 4, d = R * 1.5 * (1 - Math.exp(-3 * tau));
-      ctx.beginPath(); ctx.arc(x + Math.cos(a) * d, y + Math.sin(a) * d + R * 0.5 * tau * tau, 1.6 * DPR, 0, TAU); ctx.fill();
-    }
-    ctx.globalAlpha = 1;
   }
 }
 
@@ -670,52 +456,172 @@ function render(t) {
   let a = 0; BOB = 0;
   if (t > T_ROT) {
     const dt = t - T_ROT;
-    a = ((TAU / PERIOD) * (dt - RAMP * (1 - Math.exp(-dt / RAMP)))) % TAU;
-    BOB = 0.02 * Math.sin(dt * 1.4) * Math.min(1, dt / 2);
+    a = ((TAU / PERIOD) * (dt - RAMP_T * (1 - Math.exp(-dt / RAMP_T)))) % TAU;
+    BOB = 0.022 * Math.sin(dt * 1.5) * Math.min(1, dt / 2);
   }
   CA = Math.cos(a); SA = Math.sin(a);
-  ctx.setTransform(1, 0, 0, 1, 0, 0);
-  ctx.drawImage(papel, 0, 0);
-  dibujarAmbiente(t);
+  const glow = smooth(3.5, T_ROT, t) * (t > T_ROT ? 0.92 + 0.08 * Math.sin((t - T_ROT) * 1.3) : 1);
+  drawBG(t, glow);
+  ZB.fill(-1e9);
+  ambient(t);
 
-  const qC = clamp01((t - T_CONO) / D_CONO);
-  if (qC > 0) { calcularCono(); dibujarConoInterior(qC); dibujarBordeTrasero(qC); }
+  const fno = (t * 30) | 0;
+  const qW = clamp01((t - T_WRAP) / D_WRAP), revealY = YB - 0.05 + eio(qW) * (YMAX - YB + 0.1);
+  const qR = clamp01((t - T_RIB) / D_RIB), ribA = qR * Math.PI + 0.01;
+  const bowS = t < T_BOW ? 0 : t < T_BOW + D_BOW ? Math.max(0, backOut((t - T_BOW) / D_BOW)) : 1;
+  const bayer = BAY, ramps = RAMPS;
 
-  for (const f of FL) {
-    if (t < f.tl) continue;
-    const L = t < f.te ? eo2((t - f.tl) / ROCK) * f.len : f.len;
-    dibujarTallo(f, Math.min(L, f.stemLen));
+  for (let i = 0; i < NP; i++) {
+    const kd = KIND[i];
+    let x = PX[i], y = PY[i], z = PZ[i];
+    let flat = 0;
+    switch (kd) {
+      case K_FL: {
+        const f = FL[GRP[i]], tau = t - f.te;
+        if (tau < 0) continue;
+        if (tau < TB) {
+          if (H1[i] >= 0.28) continue;
+          const u = tau / TB, e = eo3(u), rb = RB[i];
+          x = f.c[0] + DX[i] * rb * e; y = f.c[1] + DY[i] * rb * e - 0.1 * u * u; z = f.c[2] + DZ[i] * rb * e;
+          let si = Math.min(5, (u * 2 + H2[i] * 2.5) | 0);
+          if (ih(i, fno) < 0.15) si = 0;
+          flat = SP[si];
+          if (H1[i] < 0.1 && tau > 0.06) {
+            const u2 = (tau - 0.06) / TB, e2 = eo3(u2);
+            plot3(f.c[0] + DX[i] * rb * e2, f.c[1] + DY[i] * rb * e2 - 0.1 * u2 * u2, f.c[2] + DZ[i] * rb * e2, SP[Math.min(5, si + 2)]);
+          }
+        } else {
+          const q = clamp01((tau - TB - H2[i] * DEL) / TM);
+          if (q < 1) {
+            if (H1[i] >= 0.28 + 0.72 * q) continue;
+            const e = eio(q), rb = RB[i];
+            const bx = f.c[0] + DX[i] * rb, by = f.c[1] + DY[i] * rb - 0.1, bz = f.c[2] + DZ[i] * rb;
+            x = bx + (x - bx) * e; y = by + (y - by) * e; z = bz + (z - bz) * e;
+            if (q < 0.6) flat = SP[q < 0.3 ? 1 : 2];
+          }
+        }
+        break;
+      }
+      case K_STEM: {
+        const f = FL[GRP[i]];
+        if (t < f.tl) continue;
+        if (t < f.te) {
+          const Lh = eo2((t - f.tl) / ROCK) * f.len;
+          if (PAR[i] > Lh) continue;
+          flat = (Lh - PAR[i] < 0.05) ? SP[2] : ramps[STEM][2 + SHIFT[i]];
+        } else flat = ramps[STEM][2 + SHIFT[i]];
+        break;
+      }
+      case K_LEAF: {
+        const g = eo2(clamp01((t - T_LEAF - GRP[i] * 0.13) / 0.6));
+        if (PAR[i] > g) continue;
+        if (g < 1 && g - PAR[i] < 0.08) flat = SP[2];
+        break;
+      }
+      case K_BABY: {
+        const tp = BABYT[GRP[i]];
+        if (t < tp) continue;
+        if (t - tp < 0.15) flat = SP[0];
+        else flat = ih(i, (t * 5) | 0) < 0.04 ? SP[0] : ramps[CRE][SHIFT[i]];
+        break;
+      }
+      case K_WRAP: {
+        if (t < T_WRAP || y > revealY) continue;
+        if (qW < 1 && revealY - y < 0.025) flat = SP[ih(i, fno) < 0.5 ? 0 : 1];
+        break;
+      }
+      case K_RIB: {
+        if (t < T_RIB) continue;
+        const dd = Math.abs(((PAR[i] - Math.PI / 2 + 3 * Math.PI) % TAU) - Math.PI);
+        if (dd > ribA) continue;
+        if (qR < 1 && ribA - dd < 0.12) flat = SP[1];
+        break;
+      }
+      case K_BOW: {
+        if (bowS <= 0) continue;
+        x = BC[0] + (x - BC[0]) * bowS; y = BC[1] + (y - BC[1]) * bowS; z = BC[2] + (z - BC[2]) * bowS;
+        break;
+      }
+    }
+
+    // proyección
+    const X1 = x * CA + z * SA, Z1 = z * CA - x * SA;
+    const Y2 = y * CT - Z1 * ST, Z2 = y * ST + Z1 * CT;
+    const k = FOC / (FOC - Z2);
+    const sx = CX + X1 * SS * k, sy = CY - (Y2 + BOB) * SS * k;
+    if (sx < 0 || sy < 0 || sx >= LW || sy >= LH) continue;
+    const ix = sx | 0, iy = sy | 0, zi = iy * LW + ix;
+    if (Z2 <= ZB[zi]) continue;
+    ZB[zi] = Z2;
+    if (flat) { BUF[zi] = flat; continue; }
+
+    // iluminación con tramado ordenado
+    const nx = NX[i], ny = NY[i], nz = NZ[i];
+    const NX1 = nx * CA + nz * SA, NZ1 = nz * CA - nx * SA;
+    const NY2 = ny * CT - NZ1 * ST, NZ2 = ny * ST + NZ1 * CT;
+    let d = NX1 * LX + NY2 * LY + NZ2 * LZ;
+    let rmp = RAMP[i], sh = SHIFT[i];
+    if (NZ2 < 0) {
+      if (kd === K_WRAP) { d = -d; rmp = BUR; sh = -1; }
+      else if (kd === K_LEAF || kd === K_BOW) { d = -d; sh -= 1; }
+    }
+    const lum = 0.2 + 0.8 * (d > 0 ? d : 0);
+    const R = ramps[rmp], n1 = R.length - 1;
+    let idx = Math.floor(lum * n1 + 0.5 + (bayer[(ix & 3) | ((iy & 3) << 2)] - 0.5) * 0.6) + sh;
+    if (idx < 0) idx = 0; else if (idx > n1) idx = n1;
+    BUF[zi] = R[idx];
   }
 
-  const items = [];
-  for (const f of FL) if (t > f.te) items.push({ z: proj(...f.c).z, d: () => dibujarFlor(f, t) });
-  for (const r of RAMAS) if (t > r.t0) items.push({ z: proj((r.a[0] + r.b[0]) / 2, (r.a[1] + r.b[1]) / 2, (r.a[2] + r.b[2]) / 2).z - 0.05, d: () => dibujarRama(r, t) });
-  items.sort((p, q) => p.z - q.z);
-  for (const it of items) it.d();
+  // cohetes, destellos y chispas sueltas
+  for (let fi = 0; fi < FL.length; fi++) {
+    const f = FL[fi];
+    if (t >= f.tl && t < f.te) {
+      const u = (t - f.tl) / ROCK;
+      for (let kk = 8; kk >= 1; kk--) {
+        const uk = u - kk * 0.022; if (uk < 0) continue;
+        const p = pathAt(f, eo2(uk) * f.len);
+        plot3(p[0], p[1], p[2], SP[Math.min(5, (kk * 0.7) | 0)]);
+      }
+      const p = pathAt(f, eo2(u) * f.len);
+      if (plot3(p[0], p[1], p[2], SP[0])) {
+        const hx = PIX, hy = PIY, hz = PZV + 0.02;
+        cross(hx, hy, hz, SP[0], SP[1], 1);
+        for (let j = 0; j < 4; j++) {
+          const ox = ((ih(fi * 13 + j, fno) - 0.5) * 6) | 0, oy = (ih(fi * 13 + j, fno + 999) * 5) | 0;
+          plotS(hx + ox, hy + oy + 1, hz - 0.01, SP[2 + (j % 3)]);
+        }
+      }
+    }
+    const tau = t - f.te;
+    if (tau >= 0 && tau < 1.6) {
+      if (tau < 0.1 && plot3(f.c[0], f.c[1], f.c[2], SP[0])) cross(PIX, PIY, PZV + 0.05, SP[0], SP[1], tau < 0.05 ? 3 : 2);
+      const g = f.gl;
+      for (let j = 0; j < GL; j++) {
+        const o = j * 5, life = g[o + 4];
+        if (tau > life) continue;
+        const age = tau / life;
+        if (ih(fi * 131 + j, fno) < age * 0.6) continue;
+        const dist = g[o + 3] * (1 - Math.exp(-tau * 4.5));
+        plot3(f.c[0] + g[o] * dist, f.c[1] + g[o + 1] * dist - 0.22 * tau * tau, f.c[2] + g[o + 2] * dist, SP[Math.min(5, (age * 6) | 0)]);
+      }
+    }
+  }
 
-  if (qC > 0) dibujarConoFrente(qC);
-  dibujarCinta(t);
-  dibujarLazo(t);
-
-  FL.forEach((f, i) => { if (t >= f.tl && t < f.te) dibujarCohete(f, t, i); dibujarEstallido(f, t); });
+  ctx.putImageData(img, 0, 0);
 }
 
-/* ---------- Bucle ---------- */
-const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-let tStart = performance.now();
-function reiniciar() { tStart = performance.now() - (reduce ? (T_ROT + 0.2) * 1000 : 0); }
-if (reduce) PERIOD = 16;
 function loop(now) {
-  render((now - tStart) / 1000);
+  render((now - tStart) / 1000 * VEL);
   requestAnimationFrame(loop);
 }
-window.addEventListener('pointerdown', reiniciar);
+
+function restart() { tStart = performance.now(); }
+window.addEventListener('pointerdown', restart);
+window.addEventListener('keydown', e => { if (e.key === ' ' || e.key === 'Enter') restart(); });
 let rt = 0;
 window.addEventListener('resize', () => { clearTimeout(rt); rt = setTimeout(resize, 150); });
 
-crearEscena();
 resize();
-reiniciar();
 requestAnimationFrame(loop);
 setTimeout(() => cab.classList.add('on'), 250);
 })();
