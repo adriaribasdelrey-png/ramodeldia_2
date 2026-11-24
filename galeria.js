@@ -19,17 +19,17 @@
                       : `border:1px solid ${T.borde};border-radius:12px;box-shadow:0 10px 30px rgba(0,0,0,.18);`;
   const css = `
   .gr-btn{position:fixed;top:calc(14px + env(safe-area-inset-top,0px));right:calc(14px + env(safe-area-inset-right,0px));z-index:50;
-    display:inline-flex;align-items:center;gap:8px;padding:8px 13px 9px 10px;cursor:pointer;color:${T.texto};
+    display:inline-flex;align-items:center;padding:8px 13px 9px;cursor:pointer;color:${T.texto};
     font:400 ${PIXEL ? '18px' : '17px'}/1 ${T.fTexto};letter-spacing:${PIXEL ? '.02em' : '.08em'};
     background:${PIXEL ? T.celda : 'color-mix(in srgb,' + T.fondo + ' 70%, transparent)'};
     ${PIXEL ? 'border:0;' : 'backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);'}${PIXEL ? marco : `border:1px solid ${T.borde};border-radius:999px;`}
     -webkit-tap-highlight-color:transparent}
-  .gr-btn canvas{width:18px;height:18px;${PIXEL ? 'image-rendering:pixelated;' : 'border-radius:50%;'}}
+  .gr canvas{position:static;left:auto;top:auto;transform:none;margin:0}
   .gr-btn:active{transform:translate(1px,1px)}
   .gr-btn:focus-visible,.gr-cerrar:focus-visible,.gr-celda:focus-visible{outline:2px solid ${T.acento};outline-offset:3px}
   .gr{position:fixed;inset:0;z-index:60;overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;touch-action:pan-y;background:${T.fondo};color:${T.texto}}
   .gr[hidden]{display:none!important}
-  .gr-fondo{position:fixed;inset:0;width:100%;height:100%;display:block;pointer-events:none;${PIXEL ? 'image-rendering:pixelated;' : ''}}
+  .gr .gr-fondo{position:fixed;inset:0;left:0;top:0;transform:none;width:100%;height:100%;display:block;pointer-events:none;${PIXEL ? 'image-rendering:pixelated;' : ''}}
   .gr-pag{position:relative;max-width:520px;margin:0 auto;
     padding:calc(18px + env(safe-area-inset-top,0px)) max(16px,env(safe-area-inset-right,0px)) calc(40px + env(safe-area-inset-bottom,0px)) max(16px,env(safe-area-inset-left,0px))}
   .gr-cab{position:sticky;top:0;z-index:2;display:flex;align-items:center;justify-content:space-between;gap:12px;
@@ -46,7 +46,7 @@
     background:${PIXEL ? '#0a0205' : 'color-mix(in srgb,' + T.fondo + ' 82%, ' + T.texto + ')'};${marco}}
   .gr-celda{position:relative;display:block;aspect-ratio:1;overflow:hidden;text-decoration:none;
     ${PIXEL ? 'box-shadow:0 0 0 1px ' + T.borde + ';' : 'border-radius:7px;box-shadow:0 1px 3px rgba(0,0,0,.25);'}transition:transform .12s}
-  .gr-celda canvas{display:block;width:100%;height:100%;${PIXEL ? 'image-rendering:pixelated;' : ''}}
+  .gr .gr-celda canvas{position:static;transform:none;display:block;width:100%;height:100%;${PIXEL ? 'image-rendering:pixelated;' : ''}}
   .gr-num{position:absolute;right:2px;bottom:1px;font:400 ${PIXEL ? '9px' : '10px'}/1 ${T.fTexto};color:#fffaf0;text-shadow:1px 1px 0 rgba(0,0,0,.7)}
   .gr-celda:active{transform:scale(.92)}
   .gr-hoy{box-shadow:0 0 0 2px ${T.acento},0 0 0 4px ${T.fondo};z-index:1}
@@ -65,8 +65,7 @@
   /* ---------- Estructura ---------- */
   const btn = document.createElement('button');
   btn.type = 'button'; btn.className = 'gr-btn'; btn.setAttribute('aria-haspopup', 'dialog');
-  const icono = document.createElement('canvas'); icono.setAttribute('aria-hidden', 'true');
-  btn.append(icono, document.createTextNode('Ramos'));
+  btn.textContent = 'Ramos';
 
   const gal = document.createElement('section');
   gal.className = 'gr'; gal.hidden = true;
@@ -174,14 +173,6 @@
     bloques.append(sec);
   }
   cuenta.textContent = salidos === 1 ? '1 ramo hasta hoy' : `${salidos} ramos hasta hoy`;
-
-  // Icono del botón: la miniatura del ramo de esta página (o el de hoy).
-  const propio = ramos.get((location.pathname.match(/(\d{4}-\d{2}-\d{2})\.html$/) || [])[1]) || ramos.get(hoy);
-  if (propio) {
-    const m = miniatura(propio);
-    icono.width = m.width; icono.height = m.height;
-    icono.getContext('2d').drawImage(m, 0, 0);
-  }
 
   /* ---------- Fondo de la galería, según el estilo del día ---------- */
   const BAY = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5];
