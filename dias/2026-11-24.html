@@ -1,0 +1,630 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Ramo del día</title>
+<meta name="robots" content="noindex, nofollow">
+<meta name="theme-color" content="#0d0206">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Jacquard+24&family=Jacquarda+Bastarda+9&display=swap">
+<style>
+  /* Estilo pixel art: noche burdeos, tinta crema, letra gótica de píxeles */
+  [hidden]{display:none!important}
+  html,body{margin:0;height:100%;background:#0d0206;color:#ecdcbd;overflow:hidden;overscroll-behavior:none;
+    -webkit-tap-highlight-color:transparent;-webkit-user-select:none;user-select:none;touch-action:manipulation;
+    -webkit-font-smoothing:none}
+  canvas{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);display:block;
+    image-rendering:crisp-edges;image-rendering:pixelated}
+  .cabecera{position:fixed;left:0;right:0;top:calc(24px + env(safe-area-inset-top,0px));z-index:2;display:flex;flex-direction:column;
+    align-items:center;gap:8px;text-align:center;pointer-events:none;opacity:0;transition:opacity 1.6s ease}
+  .cabecera.on{opacity:1}
+  .marca{font:400 18px/1 "Jacquarda Bastarda 9",Georgia,serif;color:#8a6a55;letter-spacing:.06em}
+  .fecha{font:400 48px/1 "Jacquard 24","Old English Text MT",Georgia,serif;color:#d9625f}
+  .saludo{max-width:min(86vw,360px);font:italic 400 18px/1.45 "Jacquarda Bastarda 9",Georgia,serif;color:#ecdcbd;text-wrap:balance}
+  .solo{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;text-align:center;padding:24px}
+  .solo h1{margin:0;font:400 48px/1 "Jacquard 24",Georgia,serif;color:#d9625f}
+  .solo p{margin:0;font:italic 400 18px/1.5 "Jacquarda Bastarda 9",Georgia,serif;color:#d4bd98}
+  @media (max-width:360px){.fecha{font-size:40px}}
+</style>
+<script>
+  // Solo móviles y tabletas: en ordenador se muestra un aviso.
+  window.ES_MOVIL = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent) ||
+    (navigator.maxTouchPoints > 1 && /Macintosh/.test(navigator.userAgent));
+</script>
+</head>
+<body>
+<canvas id="c" aria-label="Animación pixel art: un ramo de flores que nace de fuegos artificiales y gira"></canvas>
+<header class="cabecera" id="cab">
+  <span class="marca">Ramo del día</span>
+  <span class="fecha">Martes, 24 de noviembre</span>
+  <span class="saludo">Buenos días. Hoy el día empieza con flores y fuegos artificiales.</span>
+</header>
+<main class="solo" id="solo" hidden>
+  <h1>Ramo del día</h1>
+  <p>Este ramo solo se abre desde el móvil.</p>
+</main>
+<script>
+(() => {
+'use strict';
+const TAU = Math.PI * 2;
+const cv = document.getElementById('c');
+const cab = document.getElementById('cab');
+if (!window.ES_MOVIL) {
+  cv.hidden = true; cab.hidden = true;
+  document.getElementById('solo').hidden = false;
+  return;
+}
+const ctx = cv.getContext('2d', { alpha: false });
+const VEL = 1.25; // ritmo de la animación (un 20% más rápido)
+
+/* ---------- Paleta (oscuro → claro) ---------- */
+const HEX = [
+  ['#24060e','#3f0b18','#5c1022','#7a162d','#9a2138','#bc3848','#d9625f'], // 0 burdeos
+  ['#5e4034','#8a6a55','#b39575','#d4bd98','#ecdcbd','#f8eedb','#fffaf0'], // 1 crema
+  ['#4a1520','#73303a','#9c5056','#c17a77','#dda59c','#f0cbbd','#fae6da'], // 2 rosa empolvado
+  ['#2c1d14','#4a3424','#6b5036','#8f7150','#b0936c','#cdb68e'],           // 3 tallo
+  ['#6e5444','#977b63','#bea283','#dcc6a3','#efe2c8','#faf3e4'],           // 4 papel
+  ['#0d0206','#15040a','#1f0710','#2a0b16','#37101d','#45151f'],           // 5 fondo
+  ['#fffaf0','#f8e6c6','#f0c7a8','#e0909a','#c04a5c','#8a1f34'],           // 6 chispa
+  ['#231c12','#3d3322','#5c5034','#7d7049','#9d9163','#c0b585'],           // 7 hoja seca
+];
+const u32 = h => { const n = parseInt(h.slice(1), 16); return (0xFF000000 | ((n & 255) << 16) | (n & 0xFF00) | (n >> 16)) >>> 0; };
+const RAMPS = HEX.map(r => Uint32Array.from(r, u32));
+const BUR = 0, CRE = 1, BLU = 2, STEM = 3, PAPER = 4, BGR = 5, SPK = 6, LEAF = 7;
+const SP = RAMPS[SPK];
+const BAY = new Float32Array([0,8,2,10,12,4,14,6,3,11,1,9,15,7,13,5].map(v => (v + 0.5) / 16));
+
+const K_FL = 0, K_STEM = 1, K_LEAF = 2, K_BABY = 3, K_WRAP = 4, K_RIB = 5, K_BOW = 6;
+
+/* ---------- Cámara / luz ---------- */
+const TILT = 0.32, FOC = 4.2;
+const CT = Math.cos(TILT), ST = Math.sin(TILT);
+let LX = -0.45, LY = 0.62, LZ = 0.64;
+{ const l = Math.hypot(LX, LY, LZ); LX /= l; LY /= l; LZ /= l; }
+
+/* ---------- Línea de tiempo (segundos) ---------- */
+const T0 = 0.7, STG = 0.34, ROCK = 0.85, TB = 0.5, TM = 0.85, DEL = 0.3;
+const T_LEAF = 4.7, T_BABY = 5.6, T_WRAP = 6.5, D_WRAP = 1.1;
+const T_RIB = 7.5, D_RIB = 0.5, T_BOW = 7.9, D_BOW = 0.45, T_ROT = 8.5;
+const PERIOD = 7, RAMP_T = 1.2;
+const GL = 40; // chispas sueltas por explosión
+
+/* ---------- Geometría del papel ---------- */
+const YB = -0.75, SLOPE = 0.55, R0 = 0.08, YMAX = 0.22;
+const coneR = y => R0 + (y - YB) * SLOPE;
+const yTop = th => 0.05 - 0.13 * Math.sin(th) + 0.03 * Math.abs(Math.sin(th * 4.5));
+
+/* ---------- Utilidades ---------- */
+const clamp01 = v => v < 0 ? 0 : v > 1 ? 1 : v;
+const eo2 = u => 1 - (1 - u) * (1 - u);
+const eo3 = u => 1 - (1 - u) * (1 - u) * (1 - u);
+const eio = u => u < 0.5 ? 4 * u * u * u : 1 - Math.pow(-2 * u + 2, 3) / 2;
+const backOut = u => { const c1 = 1.9, c3 = c1 + 1, v = u - 1; return 1 + c3 * v * v * v + c1 * v * v; };
+const smooth = (a, b, x) => { const u = clamp01((x - a) / (b - a)); return u * u * (3 - 2 * u); };
+function ih(a, b) {
+  let h = (Math.imul(a | 0, 374761393) + Math.imul(b | 0, 668265263)) | 0;
+  h = Math.imul(h ^ (h >>> 13), 1274126177); h ^= h >>> 16;
+  return (h >>> 0) / 4294967296;
+}
+function rngF(seed) {
+  return () => {
+    seed = (seed + 0x6D2B79F5) | 0;
+    let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+/* ---------- Estado ---------- */
+let LW = 0, LH = 0, PXS = 1, SS = 1, CX = 0, CY = 0;
+let img, BUF, ZB, V0, G0, STARS = [];
+let NP = 0, PX, PY, PZ, NX, NY, NZ, RAMP, SHIFT, KIND, GRP, PAR, H1, H2, DX, DY, DZ, RB;
+let FL = [], BC = [0, 0, 0], BABYT = [];
+let CA = 1, SA = 0, BOB = 0;
+let tStart = performance.now();
+
+function pathAt(f, L) {
+  const p = f.pts, c = f.cum;
+  let k = 0;
+  while (k < 2 && c[k + 1] < L) k++;
+  const seg = c[k + 1] - c[k] || 1, u = clamp01((L - c[k]) / seg);
+  const a = p[k], b = p[k + 1];
+  return [a[0] + (b[0] - a[0]) * u, a[1] + (b[1] - a[1]) * u, a[2] + (b[2] - a[2]) * u];
+}
+
+/* ---------- Construcción del modelo 3D (nube de puntos) ---------- */
+function build() {
+  const rng = rngF(20261124);
+  const A = { x: [], y: [], z: [], nx: [], ny: [], nz: [], ramp: [], shift: [], kind: [], grp: [], par: [], dx: [], dy: [], dz: [], rb: [] };
+  const add = (x, y, z, nx, ny, nz, ramp, shift, kind, grp, par, dx = 0, dy = 0, dz = 0, rb = 0) => {
+    A.x.push(x); A.y.push(y); A.z.push(z); A.nx.push(nx); A.ny.push(ny); A.nz.push(nz);
+    A.ramp.push(ramp); A.shift.push(shift); A.kind.push(kind); A.grp.push(grp); A.par.push(par);
+    A.dx.push(dx); A.dy.push(dy); A.dz.push(dz); A.rb.push(rb);
+  };
+  const runit = () => { const z = rng() * 2 - 1, a = rng() * TAU, r = Math.sqrt(1 - z * z); return [r * Math.cos(a), r * Math.sin(a), z]; };
+  const step = 0.6 / SS;
+
+  /* Flores */
+  const defs = [[0, 0.6, 0, 0.15, BUR]];
+  const t1 = [CRE, BUR, BLU, BUR, CRE];
+  for (let i = 0; i < 5; i++) { const a = i / 5 * TAU + 0.3; defs.push([Math.cos(a) * 0.26, 0.44, Math.sin(a) * 0.26, 0.14, t1[i]]); }
+  const t2 = [BUR, CRE, BLU, BUR, CRE, BLU];
+  for (let i = 0; i < 6; i++) { const a = i / 6 * TAU + 0.3 + TAU / 12; defs.push([Math.cos(a) * 0.46, 0.24, Math.sin(a) * 0.46, 0.135, t2[i]]); }
+  const order = [0, 1, 3, 5, 2, 4, 6, 8, 10, 7, 9];
+  const GA = Math.PI * (3 - Math.sqrt(5));
+
+  FL = [];
+  defs.forEach((d, i) => {
+    const c = [d[0], d[1], d[2]], r = d[3];
+    let nx = c[0], ny = c[1] - 0.1, nz = c[2];
+    { const l = Math.hypot(nx, ny, nz); nx /= l; ny /= l; nz /= l; }
+    let rx = 0, ry = 1, rz = 0; if (Math.abs(ny) > 0.9) { rx = 1; ry = 0; }
+    let ux = ny * rz - nz * ry, uy = nz * rx - nx * rz, uz = nx * ry - ny * rx;
+    { const l = Math.hypot(ux, uy, uz); ux /= l; uy /= l; uz /= l; }
+    const vx = ny * uz - nz * uy, vy = nz * ux - nx * uz, vz = nx * uy - ny * ux;
+    const hxz = Math.hypot(c[0], c[2]);
+    const ex = hxz > 1e-6 ? c[0] / hxz : 0, ez = hxz > 1e-6 ? c[2] / hxz : 0;
+    const E = [ex * 0.035, -0.9, ez * 0.035], T = [ex * 0.022, -0.43, ez * 0.022];
+    const B = [c[0] - nx * r * 0.8, c[1] - ny * r * 0.8, c[2] - nz * r * 0.8];
+    const pts = [E, T, B, c], cum = [0];
+    for (let k = 1; k < 4; k++) cum.push(cum[k - 1] + Math.hypot(pts[k][0] - pts[k - 1][0], pts[k][1] - pts[k - 1][1], pts[k][2] - pts[k - 1][2]));
+    const tl = T0 + order.indexOf(i) * STG;
+    const f = { c, r, type: d[4], pts, cum, len: cum[3], stemLen: cum[2], tl, te: tl + ROCK, gl: new Float32Array(GL * 5) };
+    for (let j = 0; j < GL; j++) {
+      const u = runit(), o = j * 5;
+      f.gl[o] = u[0]; f.gl[o + 1] = u[1]; f.gl[o + 2] = u[2];
+      f.gl[o + 3] = 0.3 + 0.45 * rng(); f.gl[o + 4] = 0.7 + 0.8 * rng();
+    }
+    FL.push(f);
+
+    // superficie de la rosa
+    const N = Math.max(80, Math.ceil(4 * Math.PI * (r * SS) * (r * SS) * 2.3));
+    for (let k = 0; k < N; k++) {
+      const h = 1 - 2 * (k + 0.5) / N, rr = Math.sqrt(1 - h * h), th = k * GA;
+      const a = Math.cos(th) * rr, b = Math.sin(th) * rr;
+      const rad = r * (1 + 0.07 * Math.sin(th * 5 + h * 4));
+      const hs = h < 0 ? h * 0.78 : h * 0.9;
+      const la = a * rad, lb = b * rad, lh = hs * rad;
+      const px = c[0] + ux * la + vx * lb + nx * lh;
+      const py = c[1] + uy * la + vy * lb + ny * lh;
+      const pz = c[2] + uz * la + vz * lb + nz * lh;
+      const mx = ux * a + vx * b + nx * h, my = uy * a + vy * b + ny * h, mz = uz * a + vz * b + nz * h;
+      let ramp = d[4], sh = 0;
+      if (h > 0) {
+        const rp = 1 - h;
+        const ring = Math.sqrt(rp) * 4.6 + 0.45 * Math.sin(th * 3 + rp * 9);
+        const fr = ring - Math.floor(ring);
+        if (rp < 0.05 || fr < 0.16) sh = -2; else if (fr < 0.3) sh = -1; else if (fr > 0.86) sh = 1;
+      } else if (h < -0.5) {
+        ramp = LEAF; sh = Math.sin(th * 5) > 0.3 ? 0 : -1;
+      } else {
+        const fr = ((th * 5 / TAU + h * 0.5) % 1 + 1) % 1;
+        if (fr < 0.12) sh = -1;
+      }
+      const ru = runit();
+      let bx = ru[0] + mx * 0.7, by = ru[1] + my * 0.7, bz = ru[2] + mz * 0.7;
+      const bl = Math.hypot(bx, by, bz) || 1; bx /= bl; by /= bl; bz /= bl;
+      add(px, py, pz, mx, my, mz, ramp, sh, K_FL, i, 0, bx, by, bz, 0.2 + 0.26 * rng());
+    }
+    // tallo (rastro del cohete)
+    const sst = 0.45 / SS, sh = (i % 3 === 0) ? 1 : 0;
+    for (let L = 0; L < f.stemLen; L += sst) { const p = pathAt(f, L); add(p[0], p[1], p[2], 0, 0, 1, STEM, sh, K_STEM, i, L); }
+  });
+
+  /* Hojas */
+  for (let j = 0; j < 7; j++) {
+    const ang = j / 7 * TAU + 0.15 + (rng() - 0.5) * 0.3;
+    const dx = Math.cos(ang), dz = Math.sin(ang);
+    const base = [dx * 0.26, 0.1, dz * 0.26];
+    const tip = [dx * 0.72, -0.02 + rng() * 0.08, dz * 0.72];
+    let ax = tip[0] - base[0], ay = tip[1] - base[1], az = tip[2] - base[2];
+    const L = Math.hypot(ax, ay, az); ax /= L; ay /= L; az /= L;
+    let wx = -az, wz = ax; { const l = Math.hypot(wx, wz); wx /= l; wz /= l; }
+    let mx = -wz * ay, my = wz * ax - wx * az, mz = wx * ay;
+    { const l = Math.hypot(mx, my, mz); mx /= l; my /= l; mz /= l; if (my < 0) { mx = -mx; my = -my; mz = -mz; } }
+    const W = 0.085;
+    const ns = Math.ceil(L * SS / 0.5), nt = Math.ceil(2 * W * SS / 0.5);
+    for (let si = 0; si <= ns; si++) {
+      const s = si / ns, wid = Math.sin(Math.PI * Math.pow(s, 0.75));
+      for (let ti = 0; ti <= nt; ti++) {
+        const tt = (ti / nt) * 2 - 1;
+        const off = tt * W * wid, cup = 0.02 * tt * tt;
+        const x = base[0] + ax * L * s + wx * off + mx * cup;
+        const y = base[1] + ay * L * s - 0.07 * s * s + my * cup;
+        const z = base[2] + az * L * s + wz * off + mz * cup;
+        let sh = 0;
+        const vein = (s * 6 - Math.abs(tt) * 1.5) % 1;
+        if (Math.abs(tt) < 0.12) sh = -1; else if (vein > 0 && vein < 0.1) sh = -1;
+        const tw = -tt * 0.35;
+        add(x, y, z, mx + wx * tw, my, mz + wz * tw, LEAF, sh, K_LEAF, j, s);
+      }
+    }
+  }
+
+  /* Paniculata (puntitos crema) */
+  BABYT = [];
+  for (let k = 0; k < 30; k++) {
+    const yy = 0.15 + rng() * 0.75, a = rng() * TAU, rr = Math.sqrt(1 - yy * yy);
+    const dist = 0.6 + rng() * 0.1;
+    const cx = rr * Math.cos(a) * dist, cy = 0.08 + yy * dist, cz = rr * Math.sin(a) * dist;
+    const m = 4 + Math.floor(rng() * 4);
+    for (let q = 0; q < m; q++) {
+      const u = runit(), s = 0.03 * rng();
+      add(cx + u[0] * s, cy + u[1] * s, cz + u[2] * s, 0, 1, 0, CRE, rng() < 0.5 ? 5 : 6, K_BABY, k, 0);
+    }
+    BABYT.push(T_BABY + rng() * 1.1);
+  }
+
+  /* Papel del ramo (cono plisado: fuera crema, dentro burdeos) */
+  for (let y = YB; y <= YMAX; y += step) {
+    const r = coneR(y);
+    const n = Math.max(12, Math.ceil(TAU * r * 1.04 * SS / 0.6));
+    for (let j = 0; j < n; j++) {
+      const th = j / n * TAU, top = yTop(th);
+      if (y > top) continue;
+      const c = Math.cos(th), s = Math.sin(th);
+      const pr = r * (1 + 0.04 * Math.sin(th * 9));
+      const pl = 0.5 * Math.cos(th * 9);
+      let nx = c - s * pl, ny = -SLOPE, nz = s + c * pl;
+      const l = Math.hypot(nx, ny, nz); nx /= l; ny /= l; nz /= l;
+      add(c * pr, y, s * pr, nx, ny, nz, PAPER, (top - y < 0.02) ? 2 : 1, K_WRAP, 0, y);
+    }
+  }
+
+  /* Cinta */
+  for (let y = -0.47; y <= -0.40; y += step) {
+    const r = coneR(y) * 1.045 + 0.012;
+    const n = Math.ceil(TAU * r * SS / 0.6);
+    const edge = (y < -0.46 || y > -0.41) ? -1 : 0;
+    for (let j = 0; j < n; j++) {
+      const th = j / n * TAU, c = Math.cos(th), s = Math.sin(th);
+      add(c * r, y, s * r, c, -0.15, s, BUR, edge, K_RIB, 0, th);
+    }
+  }
+
+  /* Lazo */
+  BC = [0, -0.435, coneR(-0.435) * 1.045 + 0.035];
+  for (const sg of [-1, 1]) {
+    const cx = BC[0] + sg * 0.072, cy = BC[1] + 0.016, rx = 0.072, ry = 0.04, tilt = 0.25 * sg;
+    const ctl = Math.cos(tilt), stl = Math.sin(tilt);
+    const nph = Math.ceil(TAU * 0.06 * SS / 0.5), nw = Math.ceil(0.044 * SS / 0.5);
+    for (let k = 0; k < nph; k++) {
+      const ph = k / nph * TAU, ex = rx * Math.cos(ph), ey = ry * Math.sin(ph);
+      const ox = ex * ctl - ey * stl, oy = ex * stl + ey * ctl;
+      let nx = Math.cos(ph) / rx, ny = Math.sin(ph) / ry;
+      { const l = Math.hypot(nx, ny); nx /= l; ny /= l; }
+      const rnx = nx * ctl - ny * stl, rny = nx * stl + ny * ctl;
+      for (let w = 0; w <= nw; w++) {
+        const wz = (w / nw) * 0.044 - 0.022;
+        add(cx + ox, cy + oy, BC[2] + wz + 0.01 * Math.cos(ph) * sg, rnx, rny, 0.2, BUR, Math.abs(wz) > 0.017 ? -1 : 0, K_BOW, 0, 0);
+      }
+    }
+    // colas
+    const ax0 = BC[0] + sg * 0.01, ay0 = BC[1] - 0.01, az0 = BC[2] + 0.005;
+    let tx = sg * 0.075, ty = -0.19;
+    const TL = Math.hypot(tx, ty); tx /= TL; ty /= TL;
+    const sx = -ty, sy = tx;
+    const ns = Math.ceil(TL * SS / 0.5), nw2 = Math.ceil(0.034 * SS / 0.5);
+    for (let k = 0; k <= ns; k++) {
+      const s = k / ns;
+      for (let w = 0; w <= nw2; w++) {
+        const ww = (w / nw2) * 2 - 1;
+        if (s > 1 - 0.1 * (1 - Math.abs(ww))) continue; // corte en V
+        const half = 0.017 * (1 + 0.3 * s);
+        add(ax0 + tx * TL * s + sx * ww * half, ay0 + ty * TL * s + sy * ww * half, az0 + 0.015 * Math.sin(s * 5),
+            sg * 0.3 + 0.3 * Math.cos(s * 5), 0.1, 1, BUR, Math.abs(ww) > 0.8 ? -1 : 0, K_BOW, 0, 0);
+      }
+    }
+  }
+  { // nudo
+    const rk = 0.024, N = Math.max(40, Math.ceil(4 * Math.PI * (rk * SS) * (rk * SS) * 2.5));
+    for (let k = 0; k < N; k++) {
+      const h = 1 - 2 * (k + 0.5) / N, rr = Math.sqrt(1 - h * h), th = k * GA;
+      const x = Math.cos(th) * rr, y = Math.sin(th) * rr * 0.8, z = h;
+      add(BC[0] + x * rk, BC[1] + y * rk, BC[2] + 0.012 + z * rk, x, y, z, BUR, 1, K_BOW, 0, 0);
+    }
+  }
+
+  NP = A.x.length;
+  PX = Float32Array.from(A.x); PY = Float32Array.from(A.y); PZ = Float32Array.from(A.z);
+  NX = Float32Array.from(A.nx); NY = Float32Array.from(A.ny); NZ = Float32Array.from(A.nz);
+  RAMP = Uint8Array.from(A.ramp); SHIFT = Int8Array.from(A.shift); KIND = Uint8Array.from(A.kind);
+  GRP = Uint16Array.from(A.grp); PAR = Float32Array.from(A.par);
+  DX = Float32Array.from(A.dx); DY = Float32Array.from(A.dy); DZ = Float32Array.from(A.dz); RB = Float32Array.from(A.rb);
+  H1 = new Float32Array(NP); H2 = new Float32Array(NP);
+  for (let i = 0; i < NP; i++) { H1[i] = rng(); H2[i] = rng(); }
+}
+
+/* ---------- Tamaño (píxeles enteros en pantalla) ---------- */
+function resize() {
+  const dpr = Math.min(window.devicePixelRatio || 1, 4);
+  const vw = window.innerWidth, vh = window.innerHeight;
+  const dw = vw * dpr, dh = vh * dpr;
+  PXS = Math.max(2, Math.round(Math.min(dw / 134, dh / 215)));
+  LW = Math.ceil(dw / PXS); LH = Math.ceil(dh / PXS);
+  cv.width = LW; cv.height = LH;
+  cv.style.width = (LW * PXS / dpr) + 'px';
+  cv.style.height = (LH * PXS / dpr) + 'px';
+  SS = Math.min(LH * 0.72 / 1.75, LW * 0.8 / 1.3);
+  CX = LW / 2; CY = LH * 0.56 - 0.065 * SS;
+  img = ctx.createImageData(LW, LH);
+  BUF = new Uint32Array(img.data.buffer);
+  ZB = new Float32Array(LW * LH);
+  V0 = new Float32Array(LW * LH); G0 = new Float32Array(LW * LH);
+  const gx = CX, gy = CY - 0.15 * SS, gr = SS * 1.45;
+  for (let y = 0; y < LH; y++) for (let x = 0; x < LW; x++) {
+    const i = y * LW + x;
+    V0[i] = 0.1 + 0.16 * (y / LH);
+    const d = Math.hypot(x - gx, (y - gy) * 0.85) / gr, g = Math.max(0, 1 - d);
+    G0[i] = g * g * 0.5;
+  }
+  const srng = rngF(77);
+  STARS = [];
+  const ns = Math.round(LW * LH / 140);
+  for (let k = 0; k < ns; k++) STARS.push([(srng() * LW) | 0, (srng() * LH * 0.85) | 0, srng() * TAU, 0.6 + srng() * 2.2, srng() < 0.08]);
+  build();
+}
+
+/* ---------- Dibujo ---------- */
+let PIX = 0, PIY = 0, PZV = 0;
+function plot3(x, y, z, col) {
+  const X1 = x * CA + z * SA, Z1 = z * CA - x * SA;
+  const Y2 = y * CT - Z1 * ST, Z2 = y * ST + Z1 * CT;
+  const k = FOC / (FOC - Z2);
+  const sx = CX + X1 * SS * k, sy = CY - (Y2 + BOB) * SS * k;
+  if (sx < 0 || sy < 0 || sx >= LW || sy >= LH) return false;
+  const ix = sx | 0, iy = sy | 0, zi = iy * LW + ix;
+  PIX = ix; PIY = iy; PZV = Z2;
+  if (Z2 > ZB[zi]) { ZB[zi] = Z2; BUF[zi] = col; }
+  return true;
+}
+function plotS(ix, iy, z, col) {
+  if (ix < 0 || iy < 0 || ix >= LW || iy >= LH) return;
+  const zi = iy * LW + ix;
+  if (z >= ZB[zi]) { ZB[zi] = z; BUF[zi] = col; }
+}
+function cross(ix, iy, z, cc, ce, r) {
+  plotS(ix, iy, z, cc);
+  for (let k = 1; k <= r; k++) { const c = k === 1 ? ce : SP[2]; plotS(ix + k, iy, z, c); plotS(ix - k, iy, z, c); plotS(ix, iy + k, z, c); plotS(ix, iy - k, z, c); }
+}
+
+function drawBG(t, glow) {
+  const R = RAMPS[BGR], n1 = R.length - 1;
+  for (let y = 0; y < LH; y++) {
+    const row = y * LW, by = (y & 3) << 2;
+    for (let x = 0; x < LW; x++) {
+      const i = row + x;
+      let idx = ((V0[i] + glow * G0[i]) * n1 + BAY[by | (x & 3)]) | 0;
+      if (idx > n1) idx = n1;
+      BUF[i] = R[idx];
+    }
+  }
+  const C = RAMPS[CRE];
+  for (const s of STARS) {
+    const v = Math.sin(t * s[3] + s[2]);
+    if (v < 0.1) continue;
+    const i = s[1] * LW + s[0];
+    if (s[4] && v > 0.85) {
+      BUF[i] = C[5];
+      if (s[0] > 0) BUF[i - 1] = C[1]; if (s[0] < LW - 1) BUF[i + 1] = C[1];
+      if (s[1] > 0) BUF[i - LW] = C[1]; if (s[1] < LH - 1) BUF[i + LW] = C[1];
+    } else BUF[i] = v > 0.7 ? C[2] : C[1];
+  }
+}
+
+function ambient(t) {
+  if (t < T_ROT) return;
+  const base = T_ROT + 0.2, per = 1.6, fno = (t * 30) | 0;
+  const kmax = Math.floor((t - base) / per);
+  for (let k = Math.max(0, kmax - 2); k <= kmax; k++) {
+    const dt = t - (base + k * per);
+    if (dt < 0 || dt > 2.4) continue;
+    const side = k % 2 ? 1 : -1;
+    const tx = LW * 0.5 + side * (LW * 0.18 + ih(k, 1) * LW * 0.24);
+    const ty = LH * (0.07 + ih(k, 2) * 0.16);
+    const x0 = tx - side * LW * 0.06, y0 = LH + 2;
+    const R = RAMPS[[BUR, CRE, BLU][k % 3]], n1 = R.length - 1;
+    if (dt < 0.7) {
+      for (let j = 0; j < 5; j++) {
+        const u = dt / 0.7 - j * 0.035; if (u < 0) break;
+        const e = eo2(u);
+        plotS((x0 + (tx - x0) * e) | 0, (y0 + (ty - y0) * e) | 0, -50, j === 0 ? SP[1] : SP[Math.min(5, j + 1)]);
+      }
+    } else {
+      const tau = dt - 0.7, life = 1.6, age = tau / life;
+      if (age > 1) continue;
+      const Rr = Math.min(LW, LH) * 0.13;
+      if (tau < 0.08) cross(tx | 0, ty | 0, -50, SP[0], SP[1], 2);
+      for (let j = 0; j < 34; j++) {
+        if (age > 0.45 && ih(j + k * 97, fno) < age - 0.35) continue;
+        const ang = j / 34 * TAU + ih(k, 3) * 6, sp = 0.55 + 0.45 * ih(k * 97 + j, 3);
+        const ca = Math.cos(ang), sa = Math.sin(ang);
+        const ci = Math.min(n1, (age * n1 * 1.2) | 0);
+        for (let q = 0; q < 3; q++) {
+          const tq = tau - q * 0.05; if (tq < 0) break;
+          const dist = Rr * sp * (1 - Math.exp(-3.5 * tq));
+          plotS((tx + ca * dist) | 0, (ty + sa * dist + 7 * tq * tq) | 0, -50 - q, R[Math.max(0, n1 - ci - q * 2)]);
+        }
+      }
+    }
+  }
+}
+
+function render(t) {
+  let a = 0; BOB = 0;
+  if (t > T_ROT) {
+    const dt = t - T_ROT;
+    a = ((TAU / PERIOD) * (dt - RAMP_T * (1 - Math.exp(-dt / RAMP_T)))) % TAU;
+    BOB = 0.022 * Math.sin(dt * 1.5) * Math.min(1, dt / 2);
+  }
+  CA = Math.cos(a); SA = Math.sin(a);
+  const glow = smooth(3.5, T_ROT, t) * (t > T_ROT ? 0.92 + 0.08 * Math.sin((t - T_ROT) * 1.3) : 1);
+  drawBG(t, glow);
+  ZB.fill(-1e9);
+  ambient(t);
+
+  const fno = (t * 30) | 0;
+  const qW = clamp01((t - T_WRAP) / D_WRAP), revealY = YB - 0.05 + eio(qW) * (YMAX - YB + 0.1);
+  const qR = clamp01((t - T_RIB) / D_RIB), ribA = qR * Math.PI + 0.01;
+  const bowS = t < T_BOW ? 0 : t < T_BOW + D_BOW ? Math.max(0, backOut((t - T_BOW) / D_BOW)) : 1;
+  const bayer = BAY, ramps = RAMPS;
+
+  for (let i = 0; i < NP; i++) {
+    const kd = KIND[i];
+    let x = PX[i], y = PY[i], z = PZ[i];
+    let flat = 0;
+    switch (kd) {
+      case K_FL: {
+        const f = FL[GRP[i]], tau = t - f.te;
+        if (tau < 0) continue;
+        if (tau < TB) {
+          if (H1[i] >= 0.28) continue;
+          const u = tau / TB, e = eo3(u), rb = RB[i];
+          x = f.c[0] + DX[i] * rb * e; y = f.c[1] + DY[i] * rb * e - 0.1 * u * u; z = f.c[2] + DZ[i] * rb * e;
+          let si = Math.min(5, (u * 2 + H2[i] * 2.5) | 0);
+          if (ih(i, fno) < 0.15) si = 0;
+          flat = SP[si];
+          if (H1[i] < 0.1 && tau > 0.06) {
+            const u2 = (tau - 0.06) / TB, e2 = eo3(u2);
+            plot3(f.c[0] + DX[i] * rb * e2, f.c[1] + DY[i] * rb * e2 - 0.1 * u2 * u2, f.c[2] + DZ[i] * rb * e2, SP[Math.min(5, si + 2)]);
+          }
+        } else {
+          const q = clamp01((tau - TB - H2[i] * DEL) / TM);
+          if (q < 1) {
+            if (H1[i] >= 0.28 + 0.72 * q) continue;
+            const e = eio(q), rb = RB[i];
+            const bx = f.c[0] + DX[i] * rb, by = f.c[1] + DY[i] * rb - 0.1, bz = f.c[2] + DZ[i] * rb;
+            x = bx + (x - bx) * e; y = by + (y - by) * e; z = bz + (z - bz) * e;
+            if (q < 0.6) flat = SP[q < 0.3 ? 1 : 2];
+          }
+        }
+        break;
+      }
+      case K_STEM: {
+        const f = FL[GRP[i]];
+        if (t < f.tl) continue;
+        if (t < f.te) {
+          const Lh = eo2((t - f.tl) / ROCK) * f.len;
+          if (PAR[i] > Lh) continue;
+          flat = (Lh - PAR[i] < 0.05) ? SP[2] : ramps[STEM][2 + SHIFT[i]];
+        } else flat = ramps[STEM][2 + SHIFT[i]];
+        break;
+      }
+      case K_LEAF: {
+        const g = eo2(clamp01((t - T_LEAF - GRP[i] * 0.13) / 0.6));
+        if (PAR[i] > g) continue;
+        if (g < 1 && g - PAR[i] < 0.08) flat = SP[2];
+        break;
+      }
+      case K_BABY: {
+        const tp = BABYT[GRP[i]];
+        if (t < tp) continue;
+        if (t - tp < 0.15) flat = SP[0];
+        else flat = ih(i, (t * 5) | 0) < 0.04 ? SP[0] : ramps[CRE][SHIFT[i]];
+        break;
+      }
+      case K_WRAP: {
+        if (t < T_WRAP || y > revealY) continue;
+        if (qW < 1 && revealY - y < 0.025) flat = SP[ih(i, fno) < 0.5 ? 0 : 1];
+        break;
+      }
+      case K_RIB: {
+        if (t < T_RIB) continue;
+        const dd = Math.abs(((PAR[i] - Math.PI / 2 + 3 * Math.PI) % TAU) - Math.PI);
+        if (dd > ribA) continue;
+        if (qR < 1 && ribA - dd < 0.12) flat = SP[1];
+        break;
+      }
+      case K_BOW: {
+        if (bowS <= 0) continue;
+        x = BC[0] + (x - BC[0]) * bowS; y = BC[1] + (y - BC[1]) * bowS; z = BC[2] + (z - BC[2]) * bowS;
+        break;
+      }
+    }
+
+    // proyección
+    const X1 = x * CA + z * SA, Z1 = z * CA - x * SA;
+    const Y2 = y * CT - Z1 * ST, Z2 = y * ST + Z1 * CT;
+    const k = FOC / (FOC - Z2);
+    const sx = CX + X1 * SS * k, sy = CY - (Y2 + BOB) * SS * k;
+    if (sx < 0 || sy < 0 || sx >= LW || sy >= LH) continue;
+    const ix = sx | 0, iy = sy | 0, zi = iy * LW + ix;
+    if (Z2 <= ZB[zi]) continue;
+    ZB[zi] = Z2;
+    if (flat) { BUF[zi] = flat; continue; }
+
+    // iluminación con tramado ordenado
+    const nx = NX[i], ny = NY[i], nz = NZ[i];
+    const NX1 = nx * CA + nz * SA, NZ1 = nz * CA - nx * SA;
+    const NY2 = ny * CT - NZ1 * ST, NZ2 = ny * ST + NZ1 * CT;
+    let d = NX1 * LX + NY2 * LY + NZ2 * LZ;
+    let rmp = RAMP[i], sh = SHIFT[i];
+    if (NZ2 < 0) {
+      if (kd === K_WRAP) { d = -d; rmp = BUR; sh = -1; }
+      else if (kd === K_LEAF || kd === K_BOW) { d = -d; sh -= 1; }
+    }
+    const lum = 0.2 + 0.8 * (d > 0 ? d : 0);
+    const R = ramps[rmp], n1 = R.length - 1;
+    let idx = Math.floor(lum * n1 + 0.5 + (bayer[(ix & 3) | ((iy & 3) << 2)] - 0.5) * 0.6) + sh;
+    if (idx < 0) idx = 0; else if (idx > n1) idx = n1;
+    BUF[zi] = R[idx];
+  }
+
+  // cohetes, destellos y chispas sueltas
+  for (let fi = 0; fi < FL.length; fi++) {
+    const f = FL[fi];
+    if (t >= f.tl && t < f.te) {
+      const u = (t - f.tl) / ROCK;
+      for (let kk = 8; kk >= 1; kk--) {
+        const uk = u - kk * 0.022; if (uk < 0) continue;
+        const p = pathAt(f, eo2(uk) * f.len);
+        plot3(p[0], p[1], p[2], SP[Math.min(5, (kk * 0.7) | 0)]);
+      }
+      const p = pathAt(f, eo2(u) * f.len);
+      if (plot3(p[0], p[1], p[2], SP[0])) {
+        const hx = PIX, hy = PIY, hz = PZV + 0.02;
+        cross(hx, hy, hz, SP[0], SP[1], 1);
+        for (let j = 0; j < 4; j++) {
+          const ox = ((ih(fi * 13 + j, fno) - 0.5) * 6) | 0, oy = (ih(fi * 13 + j, fno + 999) * 5) | 0;
+          plotS(hx + ox, hy + oy + 1, hz - 0.01, SP[2 + (j % 3)]);
+        }
+      }
+    }
+    const tau = t - f.te;
+    if (tau >= 0 && tau < 1.6) {
+      if (tau < 0.1 && plot3(f.c[0], f.c[1], f.c[2], SP[0])) cross(PIX, PIY, PZV + 0.05, SP[0], SP[1], tau < 0.05 ? 3 : 2);
+      const g = f.gl;
+      for (let j = 0; j < GL; j++) {
+        const o = j * 5, life = g[o + 4];
+        if (tau > life) continue;
+        const age = tau / life;
+        if (ih(fi * 131 + j, fno) < age * 0.6) continue;
+        const dist = g[o + 3] * (1 - Math.exp(-tau * 4.5));
+        plot3(f.c[0] + g[o] * dist, f.c[1] + g[o + 1] * dist - 0.22 * tau * tau, f.c[2] + g[o + 2] * dist, SP[Math.min(5, (age * 6) | 0)]);
+      }
+    }
+  }
+
+  ctx.putImageData(img, 0, 0);
+}
+
+function loop(now) {
+  render((now - tStart) / 1000 * VEL);
+  requestAnimationFrame(loop);
+}
+
+function restart() { tStart = performance.now(); }
+window.addEventListener('pointerdown', restart);
+window.addEventListener('keydown', e => { if (e.key === ' ' || e.key === 'Enter') restart(); });
+let rt = 0;
+window.addEventListener('resize', () => { clearTimeout(rt); rt = setTimeout(resize, 150); });
+
+resize();
+requestAnimationFrame(loop);
+setTimeout(() => cab.classList.add('on'), 250);
+})();
+</script>
+</body>
+</html>

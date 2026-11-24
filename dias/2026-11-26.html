@@ -1,0 +1,605 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Ramo del día</title>
+<meta name="robots" content="noindex, nofollow">
+<meta name="theme-color" content="#10182b">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;1,400&display=swap">
+<style>
+  /* Estilo 2 · Realista: noche azul, rosas coral y melocotón con luz y sombra, hojas verde oliva */
+  :root{
+    --noche:#10182b; --coral:#e8796b; --melocoton:#f4b49a; --brillo:#fbe3d3; --oliva:#5c6b3a;
+    --f:"Cormorant Garamond","Iowan Old Style",Georgia,serif;
+    color-scheme:dark;
+  }
+  [hidden]{display:none!important}
+  html,body{margin:0;height:100%;background:var(--noche);color:var(--brillo);overflow:hidden;overscroll-behavior:none;
+    -webkit-tap-highlight-color:transparent;-webkit-user-select:none;user-select:none;touch-action:manipulation}
+  #lienzo{position:fixed;inset:0;width:100%;height:100%;display:block}
+  .cabecera{position:fixed;left:0;right:0;top:calc(26px + env(safe-area-inset-top,0px));display:flex;flex-direction:column;align-items:center;gap:8px;
+    text-align:center;pointer-events:none;opacity:0;transition:opacity 1.8s ease}
+  .cabecera.on{opacity:1}
+  .marca{font:500 11px/1 var(--f);letter-spacing:.34em;text-transform:uppercase;color:var(--melocoton)}
+  .fecha{font:italic 400 25px/1.1 var(--f);color:var(--brillo);text-shadow:0 0 18px rgba(244,180,154,.35)}
+  .saludo{max-width:min(82vw,340px);margin-top:4px;font:italic 400 18px/1.35 var(--f);color:var(--melocoton);text-wrap:balance}
+  .solo{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;text-align:center;padding:24px}
+  .solo h1{margin:0;font:italic 400 46px/1 var(--f);color:var(--brillo)}
+  .solo p{margin:0;font:400 19px/1.4 var(--f);color:var(--melocoton)}
+</style>
+<script>
+  // Solo móviles y tabletas: en ordenador se muestra un aviso.
+  window.ES_MOVIL = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent) ||
+    (navigator.maxTouchPoints > 1 && /Macintosh/.test(navigator.userAgent));
+</script>
+</head>
+<body>
+<canvas id="lienzo" aria-label="Animación: un ramo de rosas realistas que nace de fuegos artificiales y gira"></canvas>
+<header class="cabecera" id="cab">
+  <span class="marca">Ramo del día</span>
+  <span class="fecha">Jueves, 26 de noviembre</span>
+  <span class="saludo">Buenos días. Que la luz de hoy te encuentre sonriendo.</span>
+</header>
+<main class="solo" id="solo" hidden>
+  <h1>Ramo del día</h1>
+  <p>Este ramo solo se abre desde el móvil.</p>
+</main>
+
+<script>
+(() => {
+'use strict';
+const TAU = Math.PI * 2;
+const cv = document.getElementById('lienzo');
+const cab = document.getElementById('cab');
+if (!window.ES_MOVIL) {
+  cv.hidden = true; cab.hidden = true;
+  document.getElementById('solo').hidden = false;
+  return;
+}
+const ctx = cv.getContext('2d');
+
+/* ---------- Paleta ---------- */
+const P = {
+  noche: '#10182b', nocheC: '#1d2a47', nocheO: '#070b16',
+  coral: { o: '#8f3a33', b: '#e8796b', c: '#f6a596' },
+  melo:  { o: '#a5604c', b: '#f4b49a', c: '#fde0d0' },
+  brillo:{ o: '#c98c7c', b: '#f6d2c0', c: '#fff3ea' },
+  oliva: '#5c6b3a', olivaO: '#323c1d', olivaC: '#8d9b62',
+  papel: '#f3dccd', papelO: '#b98f7d',
+};
+
+/* ---------- Tiempo (s) ---------- */
+const T0 = 0.45, STG = 0.27, ROCK = 0.6, BURST = 0.9, BLOOM = 0.8;
+const T_HOJA = 3.6, T_CONO = 4.85, D_CONO = 0.9, T_CINTA = 5.7, D_CINTA = 0.45, T_LAZO = 6.0, D_LAZO = 0.5;
+const T_ROT = 6.6, RAMP = 1.2;
+let PERIOD = 8;
+
+/* ---------- Cámara ---------- */
+const TILT = 0.3, FOC = 4.2, CT = Math.cos(TILT), ST = Math.sin(TILT);
+let CA = 1, SA = 0, BOB = 0;
+
+/* ---------- Envoltorio ---------- */
+const YB = -0.75, SLOPE = 0.55, R0 = 0.08, Y_CINTA = -0.42;
+const coneR = (y) => R0 + (y - YB) * SLOPE;
+const yTop = (th) => 0.05 - 0.13 * Math.sin(th) + 0.03 * Math.abs(Math.sin(th * 4.5));
+
+/* ---------- Utilidades ---------- */
+const clamp01 = (v) => (v < 0 ? 0 : v > 1 ? 1 : v);
+const eo2 = (u) => 1 - (1 - u) * (1 - u);
+const eo3 = (u) => 1 - (1 - u) * (1 - u) * (1 - u);
+const backOut = (u) => { const c1 = 1.6, c3 = c1 + 1, v = u - 1; return 1 + c3 * v * v * v + c1 * v * v; };
+function rngF(seed) {
+  return () => {
+    seed = (seed + 0x6D2B79F5) | 0;
+    let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+const jit = (rng, a) => (rng() - 0.5) * a;
+function proj(x, y, z) {
+  const X1 = x * CA + z * SA, Z1 = z * CA - x * SA;
+  const Y2 = y * CT - Z1 * ST, Z2 = y * ST + Z1 * CT;
+  const k = FOC / (FOC - Z2);
+  return { x: CX + X1 * S * k, y: CY - (Y2 + BOB) * S * k, z: Z2, k };
+}
+function rotN(x, y, z) {
+  const X1 = x * CA + z * SA, Z1 = z * CA - x * SA;
+  return [X1, y * CT - Z1 * ST, y * ST + Z1 * CT];
+}
+function lienzo(w, h) { const c = document.createElement('canvas'); c.width = Math.ceil(w); c.height = Math.ceil(h); return c; }
+
+/* ---------- Pétalos y flores con luz ---------- */
+function petalo(c, ang, r0, r1, w, col, rng, onda = 0) {
+  c.save();
+  c.rotate(ang);
+  const m = r0 + (r1 - r0) * 0.5, wv = onda ? (rng() - 0.5) * onda * w : 0;
+  c.beginPath();
+  c.moveTo(r0, -w * 0.35);
+  c.quadraticCurveTo(m, -w * 1.15, r1, -w * 0.5 + wv);
+  c.quadraticCurveTo(r1 * 1.06 + onda * w * 0.3, wv * 0.5, r1, w * 0.5 + wv);
+  c.quadraticCurveTo(m, w * 1.15, r0, w * 0.35);
+  c.closePath();
+  const g = c.createRadialGradient(0, 0, r0 * 0.4, 0, 0, r1 * 1.05);
+  g.addColorStop(0, col.o); g.addColorStop(0.55, col.b); g.addColorStop(1, col.c);
+  c.fillStyle = g; c.fill();
+  c.shadowColor = 'transparent';
+  c.lineWidth = Math.max(0.6, w * 0.035);
+  c.strokeStyle = 'rgba(255,240,232,0.28)'; c.stroke();
+  c.restore();
+}
+function sombraSuave(c, R) {
+  c.shadowColor = 'rgba(5,8,18,0.45)'; c.shadowBlur = R * 0.12; c.shadowOffsetX = R * 0.03; c.shadowOffsetY = R * 0.05;
+}
+function luzGeneral(c, R) {
+  c.save();
+  c.globalCompositeOperation = 'source-atop';
+  const g = c.createLinearGradient(-R, -R, R, R);
+  g.addColorStop(0, 'rgba(255,244,236,0.22)'); g.addColorStop(0.5, 'rgba(255,244,236,0)'); g.addColorStop(1, 'rgba(10,8,20,0.32)');
+  c.fillStyle = g; c.fillRect(-R * 1.4, -R * 1.4, R * 2.8, R * 2.8);
+  c.restore();
+}
+function rosa(c, R, col, rng) {
+  c.save(); sombraSuave(c, R);
+  const a0 = rng() * TAU;
+  for (let i = 0; i < 7; i++) petalo(c, a0 + i / 7 * TAU + jit(rng, 0.2), R * 0.18, R * (0.95 + jit(rng, 0.08)), R * 0.5, col, rng, 0.25);
+  for (let i = 0; i < 6; i++) petalo(c, a0 + 0.45 + i / 6 * TAU + jit(rng, 0.2), R * 0.14, R * (0.72 + jit(rng, 0.06)), R * 0.42, col, rng, 0.15);
+  for (let i = 0; i < 5; i++) petalo(c, a0 + 0.9 + i / 5 * TAU + jit(rng, 0.2), R * 0.1, R * (0.5 + jit(rng, 0.05)), R * 0.32, col, rng);
+  c.restore();
+  // corazón: pétalos enrollados en espiral
+  c.save();
+  for (let k = 0; k < 4; k++) {
+    const r = R * (0.32 - k * 0.07), a = a0 + k * 1.7;
+    c.beginPath(); c.arc(0, 0, r, a, a + Math.PI * 1.35);
+    c.lineWidth = R * 0.07; c.strokeStyle = k % 2 ? col.o : col.b; c.lineCap = 'round'; c.stroke();
+    c.beginPath(); c.arc(0, 0, r - R * 0.03, a, a + Math.PI * 1.1);
+    c.lineWidth = R * 0.018; c.strokeStyle = 'rgba(255,240,232,0.35)'; c.stroke();
+  }
+  const g = c.createRadialGradient(0, 0, 0, 0, 0, R * 0.12);
+  g.addColorStop(0, 'rgba(60,15,15,0.7)'); g.addColorStop(1, 'rgba(60,15,15,0)');
+  c.fillStyle = g; c.beginPath(); c.arc(0, 0, R * 0.12, 0, TAU); c.fill();
+  c.restore();
+  luzGeneral(c, R);
+}
+function peonia(c, R, rng) {
+  c.save(); sombraSuave(c, R);
+  const a0 = rng() * TAU;
+  const col = P.brillo;
+  for (let i = 0; i < 9; i++) petalo(c, a0 + i / 9 * TAU + jit(rng, 0.25), R * 0.2, R * (0.97 + jit(rng, 0.1)), R * 0.42, col, rng, 0.5);
+  for (let i = 0; i < 8; i++) petalo(c, a0 + 0.3 + i / 8 * TAU + jit(rng, 0.25), R * 0.16, R * (0.74 + jit(rng, 0.08)), R * 0.36, col, rng, 0.5);
+  for (let i = 0; i < 7; i++) petalo(c, a0 + 0.7 + i / 7 * TAU + jit(rng, 0.25), R * 0.1, R * (0.52 + jit(rng, 0.06)), R * 0.3, P.melo, rng, 0.4);
+  for (let i = 0; i < 6; i++) petalo(c, a0 + 1.1 + i / 6 * TAU + jit(rng, 0.3), R * 0.05, R * (0.3 + jit(rng, 0.05)), R * 0.2, P.coral, rng, 0.3);
+  c.restore();
+  luzGeneral(c, R);
+}
+function reverso(c, R, col, rng) {
+  c.save(); sombraSuave(c, R);
+  const a0 = rng() * TAU;
+  const dk = { o: col.o, b: col.o, c: col.b };
+  for (let i = 0; i < 7; i++) petalo(c, a0 + i / 7 * TAU, R * 0.15, R * 0.92, R * 0.52, dk, rng, 0.2);
+  c.restore();
+  for (let i = 0; i < 5; i++) petalo(c, a0 + 0.3 + i / 5 * TAU, R * 0.05, R * 0.62, R * 0.16, { o: P.olivaO, b: P.oliva, c: P.olivaC }, rng);
+  luzGeneral(c, R);
+}
+function hacerHojaRama(c, L, rng, conBrotes) {
+  // tallo a lo largo de +x, de 0 a L
+  c.lineCap = 'round';
+  const yS = (x) => L * 0.05 * Math.sin(Math.PI * x / L);
+  const g = c.createLinearGradient(0, 0, L, 0);
+  g.addColorStop(0, P.olivaO); g.addColorStop(1, P.oliva);
+  c.strokeStyle = g; c.lineWidth = L * 0.022;
+  c.beginPath(); c.moveTo(0, 0); for (let x = 0; x <= L; x += L / 20) c.lineTo(x, yS(x)); c.stroke();
+  let lado = 1;
+  for (let x = L * 0.18; x < L * 0.95; x += L * 0.14) {
+    const ln = L * (0.26 - 0.1 * x / L), wd = ln * 0.32, ang = lado * (0.75 + jit(rng, 0.2));
+    c.save(); c.translate(x, yS(x)); c.rotate(ang);
+    c.shadowColor = 'rgba(5,8,18,0.4)'; c.shadowBlur = wd * 0.5; c.shadowOffsetY = wd * 0.15;
+    c.beginPath(); c.moveTo(0, 0);
+    c.quadraticCurveTo(ln * 0.45, -wd, ln, 0); c.quadraticCurveTo(ln * 0.45, wd, 0, 0); c.closePath();
+    const lg = c.createLinearGradient(0, -wd, 0, wd);
+    lg.addColorStop(0, P.olivaC); lg.addColorStop(0.5, P.oliva); lg.addColorStop(1, P.olivaO);
+    c.fillStyle = lg; c.fill();
+    c.shadowColor = 'transparent';
+    c.strokeStyle = 'rgba(230,240,200,0.35)'; c.lineWidth = Math.max(0.6, wd * 0.08);
+    c.beginPath(); c.moveTo(ln * 0.05, 0); c.quadraticCurveTo(ln * 0.5, -wd * 0.12, ln * 0.92, 0); c.stroke();
+    c.restore();
+    lado = -lado;
+  }
+  if (conBrotes) {
+    for (let b = 0; b < 3; b++) {
+      const bx = L * (0.78 + b * 0.1), by = yS(bx) + jit(rng, L * 0.12), r = L * 0.045;
+      c.save(); c.translate(bx, by); c.rotate(jit(rng, 0.6));
+      c.shadowColor = 'rgba(5,8,18,0.4)'; c.shadowBlur = r * 0.6;
+      const bg = c.createRadialGradient(-r * 0.3, -r * 0.4, r * 0.1, 0, 0, r * 1.2);
+      bg.addColorStop(0, P.coral.c); bg.addColorStop(0.6, P.coral.b); bg.addColorStop(1, P.coral.o);
+      c.fillStyle = bg; c.beginPath(); c.ellipse(r * 0.3, 0, r * 1.2, r * 0.85, 0, 0, TAU); c.fill();
+      c.shadowColor = 'transparent';
+      c.fillStyle = P.oliva;
+      for (const s of [-1, 1]) { c.beginPath(); c.moveTo(-r * 0.8, 0); c.quadraticCurveTo(-r * 0.1, s * r * 0.9, r * 0.6, s * r * 0.35); c.quadraticCurveTo(0, s * r * 0.25, -r * 0.8, 0); c.fill(); }
+      c.restore();
+    }
+  }
+}
+function hacerLazo(c, R) {
+  c.save(); sombraSuave(c, R);
+  const tela = (x0, y0, x1, y1) => { const g = c.createLinearGradient(x0, y0, x1, y1); g.addColorStop(0, P.olivaC); g.addColorStop(0.45, P.oliva); g.addColorStop(1, P.olivaO); return g; };
+  for (const s of [-1, 1]) {
+    c.beginPath(); c.moveTo(s * R * 0.08, R * 0.08); c.quadraticCurveTo(s * R * 0.3, R * 0.6, s * R * 0.42, R * 0.98); c.lineTo(s * R * 0.3, R * 0.86); c.lineTo(s * R * 0.2, R * 1.0); c.quadraticCurveTo(s * R * 0.1, R * 0.5, -s * R * 0.02, R * 0.12); c.closePath();
+    c.fillStyle = tela(0, 0, s * R * 0.4, R); c.fill();
+    c.beginPath(); c.moveTo(0, 0); c.bezierCurveTo(s * R * 0.5, -R * 0.55, s * R * 1.05, -R * 0.3, s * R * 0.95, R * 0.05); c.bezierCurveTo(s * R * 0.85, R * 0.4, s * R * 0.35, R * 0.25, 0, 0); c.closePath();
+    c.fillStyle = tela(0, -R * 0.5, 0, R * 0.3); c.fill();
+    c.save(); c.shadowColor = 'transparent';
+    c.strokeStyle = 'rgba(220,235,190,0.45)'; c.lineWidth = R * 0.03;
+    c.beginPath(); c.moveTo(s * R * 0.15, -R * 0.12); c.quadraticCurveTo(s * R * 0.55, -R * 0.42, s * R * 0.85, -R * 0.12); c.stroke();
+    c.restore();
+  }
+  c.beginPath(); c.ellipse(0, 0, R * 0.15, R * 0.18, 0, 0, TAU); c.fillStyle = tela(-R * 0.15, -R * 0.15, R * 0.15, R * 0.15); c.fill();
+  c.restore();
+}
+
+/* ---------- Escena ---------- */
+let W = 0, H = 0, DPR = 1, S = 1, CX = 0, CY = 0, fondo = null;
+let FL = [], RAMAS = [], LAZO = null, BOKEH = [];
+
+function crearEscena() {
+  const rng = rngF(20261126);
+  FL = [];
+  const defs = [['coral', 0, 0.58, 0, 0.18]];
+  const t1 = ['melo', 'peonia', 'coral', 'melo', 'peonia'];
+  for (let i = 0; i < 5; i++) { const a = i / 5 * TAU + 0.3; defs.push([t1[i], Math.cos(a) * 0.26, 0.42, Math.sin(a) * 0.26, 0.165]); }
+  const t2 = ['coral', 'melo', 'peonia', 'coral', 'melo', 'peonia'];
+  for (let i = 0; i < 6; i++) { const a = i / 6 * TAU + 0.3 + TAU / 12; defs.push([t2[i], Math.cos(a) * 0.44, 0.22, Math.sin(a) * 0.44, 0.155]); }
+  const order = [0, 1, 3, 5, 2, 4, 6, 8, 10, 7, 9, 11];
+  defs.forEach((d, i) => {
+    const c = [d[1], d[2], d[3]], r = d[4];
+    let nx = c[0], ny = c[1] + 0.6, nz = c[2];
+    { const l = Math.hypot(nx, ny, nz); nx /= l; ny /= l; nz /= l; }
+    const hxz = Math.hypot(c[0], c[2]), ex = hxz > 1e-6 ? c[0] / hxz : 0, ez = hxz > 1e-6 ? c[2] / hxz : 0;
+    const E = [ex * 0.035, -0.92, ez * 0.035], T = [ex * 0.025, Y_CINTA, ez * 0.025];
+    const B = [c[0] - nx * r * 0.7, c[1] - ny * r * 0.7, c[2] - nz * r * 0.7];
+    const pts = [E, T, B, c], cum = [0];
+    for (let k = 1; k < 4; k++) cum.push(cum[k - 1] + Math.hypot(pts[k][0] - pts[k - 1][0], pts[k][1] - pts[k - 1][1], pts[k][2] - pts[k - 1][2]));
+    const tl = T0 + order.indexOf(i) * STG;
+    const chispas = [];
+    for (let j = 0; j < 46; j++) chispas.push([rng() * TAU, 0.5 + rng() * 1.6, 0.6 + rng() * 0.9, rng()]);
+    FL.push({ tipo: d[0], c, r, n: [nx, ny, nz], rot: rng() * TAU, seed: Math.floor(rng() * 1e9), pts, cum, len: cum[3], stemLen: cum[2], tl, te: tl + ROCK, chispas });
+  });
+  RAMAS = [];
+  for (let j = 0; j < 7; j++) {
+    const a = j / 7 * TAU + 0.2 + jit(rng, 0.25), ca = Math.cos(a), sa = Math.sin(a);
+    RAMAS.push({ a: [ca * 0.28, 0.06, sa * 0.28], b: [ca * 0.74, -0.06 + jit(rng, 0.08), sa * 0.74], brotes: false, seed: Math.floor(rng() * 1e9), t0: T_HOJA + j * 0.11 });
+  }
+  for (let j = 0; j < 5; j++) {
+    const a = j / 5 * TAU + 0.9 + jit(rng, 0.3), ca = Math.cos(a), sa = Math.sin(a);
+    RAMAS.push({ a: [ca * 0.3, 0.22, sa * 0.3], b: [ca * 0.6, 0.6 + jit(rng, 0.08), sa * 0.6], brotes: true, seed: Math.floor(rng() * 1e9), t0: T_HOJA + 0.4 + j * 0.12 });
+  }
+  BOKEH = [];
+  for (let k = 0; k < 18; k++) BOKEH.push([rng(), rng() * 0.75, 0.02 + rng() * 0.05, rng(), rng() * TAU]);
+}
+
+function hacerFondo() {
+  fondo = lienzo(W, H);
+  const c = fondo.getContext('2d'), rng = rngF(3);
+  const g = c.createRadialGradient(W / 2, H * 0.45, 0, W / 2, H * 0.45, Math.max(W, H) * 0.8);
+  g.addColorStop(0, P.nocheC); g.addColorStop(0.55, P.noche); g.addColorStop(1, P.nocheO);
+  c.fillStyle = g; c.fillRect(0, 0, W, H);
+  const n = Math.round(W * H / 500);
+  for (let i = 0; i < n; i++) {
+    c.fillStyle = rng() < 0.5 ? `rgba(255,255,255,${0.012 + rng() * 0.02})` : `rgba(0,0,0,${0.03 + rng() * 0.04})`;
+    c.fillRect(rng() * W, rng() * H, DPR, DPR);
+  }
+}
+
+function hacerSprites() {
+  for (const f of FL) {
+    const R = f.r * S, sz = Math.ceil(R * 2.8);
+    const draw = (fn) => { const cvs = lienzo(sz, sz), c = cvs.getContext('2d'); c.translate(sz / 2, sz / 2); fn(c); return cvs; };
+    const col = f.tipo === 'coral' ? P.coral : f.tipo === 'melo' ? P.melo : P.brillo;
+    f.spr = draw((c) => (f.tipo === 'peonia' ? peonia(c, R, rngF(f.seed)) : rosa(c, R, col, rngF(f.seed))));
+    f.sprR = draw((c) => reverso(c, R, col, rngF(f.seed + 1)));
+    f.sz = sz;
+  }
+  for (const r of RAMAS) {
+    const L0 = 0.48 * S, cvs = lienzo(L0 * 1.15 + 10 * DPR, L0 * 0.7), c = cvs.getContext('2d');
+    c.translate(5 * DPR, L0 * 0.35);
+    hacerHojaRama(c, L0, rngF(r.seed), r.brotes);
+    r.L0 = L0; r.spr = cvs; r.ox = 5 * DPR; r.oy = L0 * 0.35;
+  }
+  const RB = 0.12 * S, cvs = lienzo(RB * 2.6, RB * 2.6), c = cvs.getContext('2d');
+  c.translate(RB * 1.3, RB * 1.0);
+  hacerLazo(c, RB);
+  LAZO = { spr: cvs, ox: RB * 1.3, oy: RB * 1.0 };
+}
+
+function resize() {
+  DPR = Math.min(window.devicePixelRatio || 1, 3);
+  W = Math.round(window.innerWidth * DPR); H = Math.round(window.innerHeight * DPR);
+  cv.width = W; cv.height = H;
+  S = Math.min(H * 0.72 / 1.75, W * 0.84 / 1.3);
+  CX = W / 2; CY = H * 0.56 - 0.085 * S;
+  hacerFondo();
+  hacerSprites();
+}
+
+/* ---------- Dibujo por fotograma ---------- */
+function pathAt(f, L) {
+  const p = f.pts, c = f.cum;
+  let k = 0;
+  while (k < 2 && c[k + 1] < L) k++;
+  const u = clamp01((L - c[k]) / ((c[k + 1] - c[k]) || 1)), a = p[k], b = p[k + 1];
+  return [a[0] + (b[0] - a[0]) * u, a[1] + (b[1] - a[1]) * u, a[2] + (b[2] - a[2]) * u];
+}
+function dibujarTallo(f, L) {
+  const pts = [proj(...f.pts[0])];
+  for (let k = 1; k < 3; k++) {
+    if (f.cum[k] <= L) pts.push(proj(...f.pts[k]));
+    else { pts.push(proj(...pathAt(f, L))); break; }
+  }
+  ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+  ctx.strokeStyle = P.olivaO; ctx.lineWidth = 3.2 * DPR;
+  ctx.beginPath(); ctx.moveTo(pts[0].x, pts[0].y); for (const p of pts) ctx.lineTo(p.x, p.y); ctx.stroke();
+  ctx.strokeStyle = P.olivaC; ctx.lineWidth = 1 * DPR; ctx.globalAlpha = 0.6;
+  ctx.beginPath(); ctx.moveTo(pts[0].x - DPR, pts[0].y); for (const p of pts) ctx.lineTo(p.x - DPR, p.y); ctx.stroke();
+  ctx.globalAlpha = 1;
+}
+function dibujarFlor(f, t) {
+  const u = clamp01((t - f.te - 0.15) / BLOOM);
+  if (u <= 0) return;
+  const Pp = proj(...f.c), N = rotN(...f.n);
+  const fac = 0.5 + 0.5 * Math.abs(N[2]);
+  const th = Math.atan2(-N[1], N[0]);
+  const s = u < 1 ? Math.max(0.05, backOut(u)) : 1;
+  const giro = (1 - eo3(u)) * -0.9;
+  ctx.save();
+  ctx.translate(Pp.x, Pp.y);
+  ctx.rotate(th); ctx.scale(fac, 1); ctx.rotate(-th + f.rot + giro);
+  const D = f.sz * Pp.k * s;
+  ctx.globalAlpha = clamp01(u * 1.6);
+  ctx.drawImage(N[2] < -0.3 ? f.sprR : f.spr, -D / 2, -D / 2, D, D);
+  ctx.restore();
+}
+function dibujarRama(r, t) {
+  const g = eo2(clamp01((t - r.t0) / 0.7));
+  if (g <= 0) return;
+  const A = proj(...r.a), B = proj(...r.b);
+  const dx = B.x - A.x, dy = B.y - A.y, len = Math.hypot(dx, dy);
+  if (len < 1) return;
+  const sc = len / r.L0;
+  ctx.save();
+  ctx.translate(A.x, A.y); ctx.rotate(Math.atan2(dy, dx)); ctx.scale(sc * g, sc * (0.4 + 0.6 * g));
+  ctx.globalAlpha = clamp01(g * 1.5);
+  ctx.drawImage(r.spr, -r.ox, -r.oy);
+  ctx.restore();
+}
+
+function aro(y0fn, rfn, n) {
+  const out = [];
+  for (let i = 0; i < n; i++) {
+    const th = i / n * TAU, y = y0fn(th), r = rfn(y, th);
+    const p = proj(Math.cos(th) * r, y, Math.sin(th) * r); p.th = th; out.push(p);
+  }
+  return out;
+}
+function envolvente(pts) {
+  const p = pts.slice().sort((a, b) => a.x - b.x || a.y - b.y);
+  const cr = (o, a, b) => (a.x - o.x) * (b.y - o.y) - (a.y - o.y) * (b.x - o.x);
+  const lo = [], up = [];
+  for (const q of p) { while (lo.length >= 2 && cr(lo[lo.length - 2], lo[lo.length - 1], q) <= 0) lo.pop(); lo.push(q); }
+  for (let i = p.length - 1; i >= 0; i--) { const q = p[i]; while (up.length >= 2 && cr(up[up.length - 2], up[up.length - 1], q) <= 0) up.pop(); up.push(q); }
+  return lo.slice(0, -1).concat(up.slice(0, -1));
+}
+function arcoFrontal(pts) {
+  const n = pts.length;
+  let i0 = -1;
+  for (let i = 0; i < n; i++) if (pts[(i - 1 + n) % n].z < 0 && pts[i].z >= 0) { i0 = i; break; }
+  if (i0 < 0) return pts.slice();
+  const arc = [];
+  for (let k = 0; k < n; k++) { const q = pts[(i0 + k) % n]; if (q.z < 0) break; arc.push(q); }
+  return arc;
+}
+let cono = null;
+function calcularCono() {
+  const N = 96;
+  const top = aro(yTop, (y, th) => coneR(y) * (1 + 0.04 * Math.sin(th * 9)), N);
+  const bot = aro(() => YB, () => R0, N);
+  cono = { top, bot, hull: envolvente(top.concat(bot)), N };
+}
+function clipCono(q) {
+  if (q >= 1) return;
+  const yb = proj(0, YB - 0.05, 0).y, yt = proj(0, 0.3, 0).y, y = yb + (yt - yb) * eo2(q);
+  ctx.beginPath(); ctx.rect(0, y, W, H - y); ctx.clip();
+}
+function dibujarConoInterior(q) {
+  const { hull } = cono;
+  ctx.save(); clipCono(q);
+  const xs = hull.map((p) => p.x), x0 = Math.min(...xs), x1 = Math.max(...xs);
+  const g = ctx.createLinearGradient(x0, 0, x1, 0);
+  g.addColorStop(0, '#a07a6c'); g.addColorStop(0.5, '#7d5a50'); g.addColorStop(1, '#4e3634');
+  ctx.fillStyle = g;
+  ctx.beginPath(); ctx.moveTo(hull[0].x, hull[0].y); for (const p of hull) ctx.lineTo(p.x, p.y); ctx.closePath(); ctx.fill();
+  ctx.restore();
+}
+function dibujarConoFrente(q) {
+  const { top, bot, N } = cono;
+  const arc = arcoFrontal(top);
+  if (arc.length < 2) return;
+  const barc = arc.map((p) => bot[Math.round(p.th / TAU * N) % N]);
+  ctx.save(); clipCono(q);
+  ctx.shadowColor = 'rgba(5,8,18,0.5)'; ctx.shadowBlur = 18 * DPR; ctx.shadowOffsetY = 6 * DPR;
+  const xs = arc.map((p) => p.x), x0 = Math.min(...xs), x1 = Math.max(...xs);
+  const g = ctx.createLinearGradient(x0, 0, x1, 0);
+  g.addColorStop(0, '#fff1e7'); g.addColorStop(0.35, P.papel); g.addColorStop(0.75, '#d9b5a3'); g.addColorStop(1, P.papelO);
+  ctx.fillStyle = g;
+  ctx.beginPath(); ctx.moveTo(arc[0].x, arc[0].y);
+  for (const p of arc) ctx.lineTo(p.x, p.y);
+  for (let i = barc.length - 1; i >= 0; i--) ctx.lineTo(barc[i].x, barc[i].y);
+  ctx.closePath(); ctx.fill();
+  ctx.shadowColor = 'transparent';
+  ctx.clip();
+  // pliegues: luz y sombra alternas
+  for (let k = 0; k < 18; k++) {
+    const th = ((k / 18) * TAU + 0.12) % TAU, i = Math.round(th / TAU * N) % N;
+    const a = top[i], b = bot[i];
+    if (a.z < 0) continue;
+    const ang = Math.atan2(b.y - a.y, b.x - a.x);
+    const nx = Math.cos(ang + Math.PI / 2) * 5 * DPR, ny = Math.sin(ang + Math.PI / 2) * 5 * DPR;
+    const lg = ctx.createLinearGradient(a.x - nx, a.y - ny, a.x + nx, a.y + ny);
+    lg.addColorStop(0, 'rgba(255,248,242,0)'); lg.addColorStop(0.45, 'rgba(255,248,242,0.35)'); lg.addColorStop(0.55, 'rgba(90,55,50,0.25)'); lg.addColorStop(1, 'rgba(90,55,50,0)');
+    ctx.strokeStyle = lg; ctx.lineWidth = 10 * DPR;
+    ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
+  }
+  ctx.restore();
+  // borde superior iluminado
+  ctx.save(); clipCono(q);
+  ctx.strokeStyle = 'rgba(255,246,238,0.8)'; ctx.lineWidth = 1.4 * DPR; ctx.lineJoin = 'round';
+  ctx.beginPath(); ctx.moveTo(arc[0].x, arc[0].y); for (const p of arc) ctx.lineTo(p.x, p.y); ctx.stroke();
+  ctx.restore();
+}
+function dibujarCinta(t) {
+  const q = clamp01((t - T_CINTA) / D_CINTA);
+  if (q <= 0) return;
+  const r = coneR(Y_CINTA) * 1.06 + 0.012, n = 80, pts = [];
+  for (let i = 0; i <= n; i++) {
+    const th = i / n * TAU, dd = Math.abs(((th - Math.PI / 2 + 3 * Math.PI) % TAU) - Math.PI);
+    const p = proj(Math.cos(th) * r, Y_CINTA, Math.sin(th) * r);
+    p.ok = p.z >= -0.01 && dd <= q * Math.PI + 0.01; p.c = Math.cos(th); pts.push(p);
+  }
+  const bw = 0.05 * S;
+  let cur = null; const tramos = [];
+  for (const p of pts) { if (p.ok) { if (!cur) { cur = []; tramos.push(cur); } cur.push(p); } else cur = null; }
+  ctx.lineCap = 'butt'; ctx.lineJoin = 'round';
+  for (const tr of tramos) {
+    if (tr.length < 2) continue;
+    for (let i = 1; i < tr.length; i++) {
+      const a = tr[i - 1], b = tr[i], luz = 0.5 - 0.5 * b.c;
+      ctx.strokeStyle = `rgb(${Math.round(50 + 70 * (1 - luz))},${Math.round(62 + 75 * (1 - luz))},${Math.round(30 + 35 * (1 - luz))})`;
+      ctx.lineWidth = bw * b.k;
+      ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x + 0.5, b.y); ctx.stroke();
+    }
+    ctx.strokeStyle = 'rgba(220,235,190,0.45)'; ctx.lineWidth = 1.2 * DPR;
+    ctx.beginPath(); ctx.moveTo(tr[0].x, tr[0].y - bw * 0.3); for (const p of tr) ctx.lineTo(p.x, p.y - bw * 0.3 * p.k); ctx.stroke();
+  }
+}
+function dibujarLazo(t) {
+  if (t < T_LAZO) return;
+  const u = clamp01((t - T_LAZO) / D_LAZO), s = u < 1 ? Math.max(0, backOut(u)) : 1;
+  const r = coneR(Y_CINTA) * 1.06 + 0.03;
+  const p = proj(0, Y_CINTA, r), N = rotN(0, 0, 1);
+  if (N[2] < 0.12) return;
+  ctx.save(); ctx.translate(p.x, p.y); ctx.scale(N[2] * s * p.k, s * p.k);
+  ctx.drawImage(LAZO.spr, -LAZO.ox, -LAZO.oy);
+  ctx.restore();
+}
+
+function brillo(x, y, r, col, a) {
+  const g = ctx.createRadialGradient(x, y, 0, x, y, r);
+  g.addColorStop(0, `rgba(255,250,244,${a})`); g.addColorStop(0.3, col.replace('A', a * 0.7)); g.addColorStop(1, col.replace('A', 0));
+  ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y, r, 0, TAU); ctx.fill();
+}
+const LUZ = ['rgba(251,227,211,A)', 'rgba(244,180,154,A)', 'rgba(232,121,107,A)'];
+function dibujarCohete(f, t, fi) {
+  const u = (t - f.tl) / ROCK, L = eo2(u) * f.len;
+  const pos = proj(...pathAt(f, L));
+  ctx.globalCompositeOperation = 'lighter';
+  for (let k = 1; k <= 7; k++) {
+    const uk = u - k * 0.025; if (uk < 0) break;
+    const q = proj(...pathAt(f, eo2(uk) * f.len));
+    brillo(q.x + Math.sin(fi * 13 + k * 3 + t * 30) * 1.5 * DPR, q.y, (6 - k * 0.6) * DPR, LUZ[1], 0.5 - k * 0.06);
+  }
+  brillo(pos.x, pos.y, 16 * DPR, LUZ[0], 0.95);
+  ctx.globalCompositeOperation = 'source-over';
+}
+function dibujarEstallido(f, t) {
+  const tau = t - f.te;
+  if (tau < 0 || tau > BURST + 0.6) return;
+  const p0 = proj(...f.c), R = f.r * S * p0.k;
+  ctx.globalCompositeOperation = 'lighter';
+  if (tau < 0.25) brillo(p0.x, p0.y, R * (1.2 + tau * 6), LUZ[0], 0.9 * (1 - tau / 0.25));
+  for (const [a, d, life, h] of f.chispas) {
+    const L = life * (BURST + 0.4); if (tau > L) continue;
+    const age = tau / L, e = 1 - Math.exp(-4.2 * tau);
+    const x = p0.x + Math.cos(a) * R * d * 1.6 * e, y = p0.y + Math.sin(a) * R * d * 1.6 * e + R * 0.9 * tau * tau;
+    const al = (1 - age) * (0.55 + 0.45 * Math.sin(t * 40 + h * 20) * 0.5 + 0.2);
+    brillo(x, y, (2.2 + h * 3.5) * DPR * (1 - age * 0.5), LUZ[Math.floor(h * 3)], clamp01(al));
+  }
+  ctx.globalCompositeOperation = 'source-over';
+}
+function dibujarFondo(t) {
+  ctx.drawImage(fondo, 0, 0);
+  ctx.globalCompositeOperation = 'lighter';
+  for (const [x, y, r, h, ph] of BOKEH) {
+    const a = 0.05 + 0.04 * Math.sin(t * 0.6 + ph);
+    const g = ctx.createRadialGradient(x * W, y * H, 0, x * W, y * H, r * W);
+    g.addColorStop(0, LUZ[Math.floor(h * 3)].replace('A', a)); g.addColorStop(0.7, LUZ[Math.floor(h * 3)].replace('A', a * 0.6)); g.addColorStop(1, LUZ[0].replace('A', 0));
+    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x * W, y * H, r * W, 0, TAU); ctx.fill();
+  }
+  ctx.globalCompositeOperation = 'source-over';
+}
+function dibujarAmbiente(t) {
+  if (t < T_ROT) return;
+  const per = 2.2, base = T_ROT + 0.4, kmax = Math.floor((t - base) / per);
+  ctx.globalCompositeOperation = 'lighter';
+  for (let k = Math.max(0, kmax - 1); k <= kmax; k++) {
+    const tau = t - (base + k * per); if (tau < 0 || tau > 1.6) continue;
+    const b = BOKEH[k % BOKEH.length], lado = k % 2 ? 1 : -1;
+    const x = W * 0.5 + lado * W * (0.22 + b[0] * 0.18), y = H * (0.2 + b[1] * 0.1), R = S * 0.1;
+    for (let j = 0; j < 22; j++) {
+      const a = j / 22 * TAU + b[4], e = 1 - Math.exp(-3.5 * tau);
+      brillo(x + Math.cos(a) * R * 1.5 * e, y + Math.sin(a) * R * 1.5 * e + R * 0.6 * tau * tau, 2.4 * DPR, LUZ[j % 3], 0.6 * (1 - tau / 1.6));
+    }
+  }
+  ctx.globalCompositeOperation = 'source-over';
+}
+
+function render(t) {
+  let a = 0; BOB = 0;
+  if (t > T_ROT) {
+    const dt = t - T_ROT;
+    a = ((TAU / PERIOD) * (dt - RAMP * (1 - Math.exp(-dt / RAMP)))) % TAU;
+    BOB = 0.02 * Math.sin(dt * 1.4) * Math.min(1, dt / 2);
+  }
+  CA = Math.cos(a); SA = Math.sin(a);
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  dibujarFondo(t);
+  dibujarAmbiente(t);
+
+  const qC = clamp01((t - T_CONO) / D_CONO);
+  if (qC > 0) { calcularCono(); dibujarConoInterior(qC); }
+  for (const f of FL) {
+    if (t < f.tl) continue;
+    const L = t < f.te ? eo2((t - f.tl) / ROCK) * f.len : f.len;
+    dibujarTallo(f, Math.min(L, f.stemLen));
+  }
+  const items = [];
+  for (const f of FL) if (t > f.te) items.push({ z: proj(...f.c).z, d: () => dibujarFlor(f, t) });
+  for (const r of RAMAS) if (t > r.t0) items.push({ z: proj((r.a[0] + r.b[0]) / 2, (r.a[1] + r.b[1]) / 2, (r.a[2] + r.b[2]) / 2).z - 0.05, d: () => dibujarRama(r, t) });
+  items.sort((p, q) => p.z - q.z);
+  for (const it of items) it.d();
+  if (qC > 0) dibujarConoFrente(qC);
+  dibujarCinta(t);
+  dibujarLazo(t);
+  FL.forEach((f, i) => { if (t >= f.tl && t < f.te) dibujarCohete(f, t, i); dibujarEstallido(f, t); });
+}
+
+/* ---------- Bucle ---------- */
+const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+let tStart = performance.now();
+function reiniciar() { tStart = performance.now() - (reduce ? (T_ROT + 0.2) * 1000 : 0); }
+if (reduce) PERIOD = 16;
+function loop(now) { render((now - tStart) / 1000); requestAnimationFrame(loop); }
+window.addEventListener('pointerdown', reiniciar);
+let rt = 0;
+window.addEventListener('resize', () => { clearTimeout(rt); rt = setTimeout(resize, 150); });
+
+crearEscena();
+resize();
+reiniciar();
+requestAnimationFrame(loop);
+setTimeout(() => cab.classList.add('on'), 250);
+})();
+</script>
+</body>
+</html>
