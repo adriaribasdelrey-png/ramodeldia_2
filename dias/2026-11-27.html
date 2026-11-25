@@ -1,0 +1,859 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Ramo del día</title>
+<meta name="robots" content="noindex, nofollow">
+<meta name="theme-color" content="#f5f1ea">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bodoni+Moda:ital,opsz,wght@0,6..96,400;0,6..96,700;1,6..96,400;1,6..96,600&display=swap">
+<style>
+  /* Estilo 3 · Tipográfico: flores, tallos y hojas hechos de letras. Negro, azul cobalto y amarillo limón sobre blanco roto */
+  :root{
+    --papel:#f5f1ea; --negro:#141414; --cobalto:#2547c9; --limon:#f2d230;
+    --f:"Bodoni Moda","Bodoni 72","Didot",Georgia,serif;
+    color-scheme:light;
+  }
+  [hidden]{display:none!important}
+  html,body{margin:0;height:100%;background:var(--papel);color:var(--negro);overflow:hidden;overscroll-behavior:none;
+    -webkit-tap-highlight-color:transparent;-webkit-user-select:none;user-select:none;touch-action:manipulation}
+  #lienzo{position:fixed;inset:0;width:100%;height:100%;display:block}
+  .cabecera{position:fixed;left:0;right:0;top:calc(24px + env(safe-area-inset-top,0px));display:flex;flex-direction:column;align-items:center;gap:7px;
+    text-align:center;pointer-events:none;opacity:0;transition:opacity 1.8s ease}
+  .cabecera.on{opacity:1}
+  .marca{font:700 10.5px/1 var(--f);letter-spacing:.42em;text-transform:uppercase;color:var(--cobalto);padding-left:.42em}
+  .fecha{font:italic 400 26px/1.1 var(--f);color:var(--negro)}
+  .regla{width:72px;height:8px;display:block}
+  .saludo{max-width:min(82vw,340px);margin-top:1px;font:italic 400 17px/1.35 var(--f);color:var(--cobalto);text-wrap:balance}
+  .pie{position:fixed;left:0;right:0;bottom:calc(16px + env(safe-area-inset-bottom,0px));text-align:center;pointer-events:none;
+    font:400 9.5px/1 var(--f);letter-spacing:.5em;text-transform:uppercase;color:rgba(20,20,20,.45);padding-left:.5em;opacity:0;transition:opacity 1.8s ease}
+  .pie.on{opacity:1}
+  .solo{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;text-align:center;padding:24px}
+  .solo h1{margin:0;font:italic 400 46px/1 var(--f);color:var(--negro)}
+  .solo p{margin:0;font:400 18px/1.4 var(--f);color:var(--cobalto)}
+  .solo i{display:block;width:12px;height:12px;border-radius:50%;background:var(--limon);box-shadow:0 0 0 1px var(--negro)}
+</style>
+<script>
+  // Solo móviles y tabletas: en ordenador se muestra un aviso.
+  window.ES_MOVIL = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent) ||
+    (navigator.maxTouchPoints > 1 && /Macintosh/.test(navigator.userAgent));
+</script>
+</head>
+<body>
+<canvas id="lienzo" aria-label="Animación: un ramo hecho de letras que nace de fuegos artificiales y gira"></canvas>
+<header class="cabecera" id="cab">
+  <span class="marca">Ramo del día</span>
+  <span class="fecha">Viernes, 27 de noviembre</span>
+  <svg class="regla" viewBox="0 0 72 8" aria-hidden="true"><line x1="2" y1="4" x2="30" y2="4" stroke="#141414" stroke-width="1"/><circle cx="36" cy="4" r="3" fill="#f2d230" stroke="#141414" stroke-width=".8"/><line x1="42" y1="4" x2="70" y2="4" stroke="#141414" stroke-width="1"/></svg>
+  <span class="saludo">Buenos días. Hoy las flores vienen escritas, letra a letra, para ti.</span>
+</header>
+<div class="pie" id="pie">Tipográfico · nº 3</div>
+<main class="solo" id="solo" hidden>
+  <h1>Ramo del día</h1>
+  <i></i>
+  <p>Este ramo solo se abre desde el móvil.</p>
+</main>
+
+<script>
+(() => {
+'use strict';
+const TAU = Math.PI * 2;
+const cv = document.getElementById('lienzo');
+const cab = document.getElementById('cab');
+const pie = document.getElementById('pie');
+if (!window.ES_MOVIL) {
+  cv.hidden = true; cab.hidden = true; pie.hidden = true;
+  document.getElementById('solo').hidden = false;
+  return;
+}
+const ctx = cv.getContext('2d');
+
+/* ---------- Paleta y letra ---------- */
+const C = {
+  papel: '#f5f1ea', negro: '#141414',
+  cobalto: '#2547c9', cobaltoO: '#1a3496', cobaltoC: '#6f88e6',
+  limon: '#f2d230', limonO: '#c9ab14', limonC: '#f8e68a',
+  diario: '#ede6d8', diarioO: '#ddd3bf',
+};
+const FAM = '"Bodoni Moda","Bodoni 72","Didot",Georgia,serif';
+
+/* ---------- Tiempo (s) ---------- */
+const T0 = 0.45, STG = 0.27, ROCK = 0.6, BURST = 0.42, DRAW = 0.8;
+const T_HOJA = 3.6, T_CONO = 4.85, D_CONO = 0.9, T_CINTA = 5.7, D_CINTA = 0.45, T_LAZO = 6.0, D_LAZO = 0.5;
+const T_ROT = 6.6, RAMP = 1.2;
+let PERIOD = 8;
+
+/* ---------- Cámara ---------- */
+const TILT = 0.3, FOC = 4.2, CT = Math.cos(TILT), ST = Math.sin(TILT);
+let CA = 1, SA = 0, BOB = 0;
+
+/* ---------- Envoltorio (papel de periódico) ---------- */
+const YB = -0.75, SLOPE = 0.55, R0 = 0.08, Y_CINTA = -0.42;
+const coneR = (y) => R0 + (y - YB) * SLOPE;
+const yTop = (th) => 0.05 - 0.13 * Math.sin(th) + 0.03 * Math.abs(Math.sin(th * 4.5));
+
+/* ---------- Utilidades ---------- */
+const clamp01 = (v) => (v < 0 ? 0 : v > 1 ? 1 : v);
+const eo2 = (u) => 1 - (1 - u) * (1 - u);
+const eo3 = (u) => 1 - (1 - u) * (1 - u) * (1 - u);
+const backOut = (u) => { const c1 = 1.7, c3 = c1 + 1, v = u - 1; return 1 + c3 * v * v * v + c1 * v * v; };
+function rngF(seed) {
+  return () => {
+    seed = (seed + 0x6D2B79F5) | 0;
+    let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+const jit = (rng, a) => (rng() - 0.5) * a;
+const pick = (rng, arr) => arr[Math.floor(rng() * arr.length) % arr.length];
+
+function proj(x, y, z) {
+  const X1 = x * CA + z * SA, Z1 = z * CA - x * SA;
+  const Y2 = y * CT - Z1 * ST, Z2 = y * ST + Z1 * CT;
+  const k = FOC / (FOC - Z2);
+  return { x: CX + X1 * S * k, y: CY - (Y2 + BOB) * S * k, z: Z2, k };
+}
+function rotN(x, y, z) {
+  const X1 = x * CA + z * SA, Z1 = z * CA - x * SA;
+  return [X1, y * CT - Z1 * ST, y * ST + Z1 * CT];
+}
+
+/* ---------- Letras: medida y dibujo centrado en su tinta ---------- */
+const mc = document.createElement('canvas').getContext('2d');
+const GM = new Map();
+function gm(f, ch) {
+  const key = f + '|' + ch;
+  let v = GM.get(key);
+  if (v) return v;
+  mc.font = `${f} 100px ${FAM}`;
+  mc.textAlign = 'left'; mc.textBaseline = 'alphabetic';
+  const m = mc.measureText(ch);
+  if (m.actualBoundingBoxAscent !== undefined && (m.actualBoundingBoxAscent + m.actualBoundingBoxDescent) > 0) {
+    v = { cx: (m.actualBoundingBoxRight - m.actualBoundingBoxLeft) / 200, cy: (m.actualBoundingBoxDescent - m.actualBoundingBoxAscent) / 200, w: m.width / 100 };
+  } else v = { cx: m.width / 200, cy: -0.34, w: m.width / 100 };
+  GM.set(key, v);
+  return v;
+}
+function glifo(c, ch, f, px, col, st) {
+  const m = gm(f, ch);
+  c.font = `${f} ${px}px ${FAM}`;
+  const x = -m.cx * px, y = -m.cy * px;
+  if (st) { c.lineWidth = st; c.strokeStyle = C.negro; c.lineJoin = 'round'; c.strokeText(ch, x, y); }
+  c.fillStyle = col; c.fillText(ch, x, y);
+}
+
+/* ---------- Definiciones (coordenadas unidad) ---------- */
+function finish(def) {
+  def.discos = def.discos || []; def.lineas = def.lineas || []; def.glifos = def.glifos || [];
+  def.len = 0;
+  for (const s of def.lineas) {
+    s.seg = [];
+    for (let i = 1; i < s.pts.length; i++) { const L = Math.hypot(s.pts[i][0] - s.pts[i - 1][0], s.pts[i][1] - s.pts[i - 1][1]); s.seg.push(L); def.len += L; }
+  }
+  return def;
+}
+function festón(rng, n, r0, lobes) {
+  const pts = [], ph = rng() * TAU;
+  for (let i = 0; i < n; i++) {
+    const t = i / n * TAU, r = r0 * (0.9 + 0.1 * Math.abs(Math.sin(t * lobes / 2 + ph)));
+    pts.push([Math.cos(t) * r, Math.sin(t) * r]);
+  }
+  return pts;
+}
+
+// Margarita: pétalos que son «O» estiradas, botón amarillo y asterisco
+function makeMargarita(rng) {
+  const discos = [{ x: 0, y: 0, r: 0.3, col: C.limon, st: 0.9 }], glifos = [];
+  const n = 12, a0 = rng() * TAU;
+  for (let i = 0; i < n; i++) {
+    const a = a0 + i / n * TAU + jit(rng, 0.06), r = 0.64 + jit(rng, 0.04);
+    glifos.push({ ch: 'O', f: '400', s: 0.6 + jit(rng, 0.05), x: Math.cos(a) * r, y: Math.sin(a) * r, rot: a + Math.PI / 2, sx: 0.62, sy: 1.18, col: C.cobalto, d: 0.12 + i / n * 0.5, giro: 1.4 });
+  }
+  for (let i = 0; i < 10; i++) { const a = i / 10 * TAU + a0; glifos.push({ r: 0.026, x: Math.cos(a) * 0.2, y: Math.sin(a) * 0.2, rot: 0, col: C.negro, d: 0.55 + i * 0.02 }); }
+  glifos.push({ ch: '*', f: '700', s: 0.36, x: 0, y: 0, rot: rng() * TAU, col: C.negro, d: 0.8, giro: 3 });
+  return finish({ discos, glifos });
+}
+// Rosa: la palabra «rosa» enroscada en espiral sobre un festón amarillo
+function makeRosa(rng) {
+  const discos = [{ pts: festón(rng, 60, 0.98, 6), col: C.limon, st: 0.9 }], glifos = [];
+  const txt = 'rosa·';
+  let th = rng() * TAU, r = 0.83, k = 0;
+  while (r > 0.13 && k < 160) {
+    const s = 0.09 + 0.2 * r, ch = txt[k % txt.length];
+    glifos.push({ ch, f: 'italic 600', s, x: Math.cos(th) * r, y: Math.sin(th) * r, rot: th + Math.PI / 2, col: ch === '·' ? C.cobalto : C.negro, d: 0, giro: 0.8 });
+    const adv = s * (ch === '·' ? 0.34 : 0.56);
+    th += adv / r;
+    r -= (adv / r) * (s * 1.02) / TAU;
+    k++;
+  }
+  glifos.forEach((g, i) => { g.d = i / glifos.length * 0.85; });
+  glifos.push({ r: 0.05, x: 0, y: 0, rot: 0, col: C.negro, d: 0.9 });
+  return finish({ discos, glifos });
+}
+// Aster: rayos que son palabras cortas, con una «ñ» en el centro
+const PALABRAS = ['luz', 'sol', 'hoy', 'flor', 'día', 'mar', 'sí', 'aire', 'miel', 'risa', 'paz', 'té'];
+function makeAster(rng) {
+  const discos = [{ x: 0, y: 0, r: 0.27, col: C.limon, st: 0.9 }], glifos = [];
+  const n = 9, a0 = rng() * TAU, off = Math.floor(rng() * PALABRAS.length);
+  for (let i = 0; i < n; i++) {
+    const a = a0 + i / n * TAU + jit(rng, 0.05), w = PALABRAS[(i + off) % PALABRAS.length];
+    for (let j = 0; j < w.length; j++) {
+      const r = 0.4 + j * 0.17;
+      glifos.push({ ch: w[j], f: '700', s: 0.24 - j * 0.012, x: Math.cos(a) * r, y: Math.sin(a) * r, rot: a, col: j === 0 ? C.cobaltoO : C.cobalto, d: 0.1 + j * 0.13 + i * 0.015, giro: 1.2 });
+    }
+  }
+  glifos.push({ ch: 'ñ', f: 'italic 600', s: 0.36, x: 0, y: 0, rot: jit(rng, 0.4), col: C.negro, d: 0.75, giro: 2 });
+  return finish({ discos, glifos });
+}
+function makeReverso(tipo, rng) {
+  const col = tipo === 'rosa' ? C.limonO : C.cobaltoO;
+  const discos = [{ x: 0, y: 0, r: 0.82, col, st: 0.9 }], glifos = [];
+  for (let k = 0; k < 5; k++) {
+    const a = k / 5 * TAU + rng() * 0.3;
+    glifos.push({ ch: 'l', f: 'italic 600', s: 0.55, x: Math.cos(a) * 0.4, y: Math.sin(a) * 0.4, rot: a + Math.PI / 2, col: C.negro, d: 0 });
+  }
+  glifos.push({ r: 0.1, x: 0, y: 0, rot: 0, col: C.negro, d: 0 });
+  return finish({ discos, glifos });
+}
+// Rama de hojas: un tallo fino con «0» a modo de hojas
+function makeHoja(rng) {
+  const ys = (x) => 0.06 * Math.sin(Math.PI * x);
+  const stem = [];
+  for (let i = 0; i <= 18; i++) { const x = i / 18; stem.push([x, ys(x)]); }
+  const lineas = [{ pts: stem, w: 0.9, col: C.negro }], glifos = [];
+  let side = 1;
+  for (let x = 0.16; x <= 0.92; x += 0.12) {
+    const phi = side * (Math.PI / 2 - 0.65), L = 0.085;
+    glifos.push({ ch: '0', f: '400', s: 0.2 * (1 - 0.3 * x), x: x + Math.cos(phi) * L, y: ys(x) + Math.sin(phi) * L, rot: phi + Math.PI / 2, sx: 0.62, sy: 1.2, col: rng() < 0.28 ? C.cobalto : C.negro, d: x * 0.9 });
+    side = -side;
+  }
+  glifos.push({ ch: '0', f: '400', s: 0.17, x: 1.06, y: ys(1), rot: Math.PI / 2, sx: 0.62, sy: 1.2, col: C.negro, d: 0.95 });
+  return finish({ lineas, glifos, pop: true });
+}
+// Ramita de signos: puntos amarillos y una exclamación
+function makeSignos(rng) {
+  const lineas = [], glifos = [];
+  const stem = [];
+  for (let i = 0; i <= 14; i++) { const x = i / 14; stem.push([x, -0.05 * Math.sin(Math.PI * x)]); }
+  lineas.push({ pts: stem, w: 0.8, col: C.negro });
+  const ends = [[1, 0]];
+  for (const s of [1, -1]) { const e = [0.86, s * 0.16]; lineas.push({ pts: [[0.55, -0.04], [0.72, s * 0.08], e], w: 0.7, col: C.negro }); ends.push(e); }
+  ends.forEach(([ex, ey], n) => {
+    for (let b = 0; b < 3; b++) glifos.push({ r: 0.032 + rng() * 0.012, x: ex + jit(rng, 0.09), y: ey + jit(rng, 0.09), rot: 0, col: C.limon, st: 0.6, d: 0.6 + n * 0.08 + b * 0.04 });
+  });
+  glifos.push({ ch: '¡', f: 'italic 600', s: 0.16, x: 0.42, y: -0.13, rot: -0.3, col: C.cobalto, d: 0.5 });
+  return finish({ lineas, glifos, pop: true });
+}
+// Lazo: un «&» cobalto con su sombra amarilla y dos cintas
+function makeLazo() {
+  const discos = [], glifos = [];
+  for (const s of [-1, 1]) discos.push({ pts: [[s * 0.06, 0.18], [s * 0.4, 0.98], [s * 0.28, 0.88], [s * 0.18, 1.0], [s * -0.02, 0.24]], col: C.cobaltoO });
+  glifos.push({ ch: '&', f: 'italic 600', s: 1.7, x: 0.07, y: 0.06, rot: 0, col: C.limon, d: 0 });
+  glifos.push({ ch: '&', f: 'italic 600', s: 1.7, x: 0, y: 0, rot: 0, col: C.cobalto, d: 0.1 });
+  return finish({ discos, glifos });
+}
+
+function pathPts(c, pts, R) {
+  c.moveTo(pts[0][0] * R, pts[0][1] * R);
+  for (let i = 1; i < pts.length; i++) c.lineTo(pts[i][0] * R, pts[i][1] * R);
+  c.closePath();
+}
+function drawDef(c, def, p, R, lw) {
+  c.textAlign = 'left'; c.textBaseline = 'alphabetic';
+  c.lineCap = 'round'; c.lineJoin = 'round';
+  const ad = clamp01(p / 0.35);
+  if (ad > 0) for (const d of def.discos) {
+    const sc = 0.6 + 0.4 * eo3(ad);
+    c.globalAlpha = ad; c.fillStyle = d.col; c.beginPath();
+    if (d.pts) pathPts(c, d.pts, R * sc); else c.arc(d.x * R, d.y * R, d.r * R * sc, 0, TAU);
+    c.fill();
+    if (d.st) { c.strokeStyle = C.negro; c.lineWidth = d.st * lw; c.stroke(); }
+  }
+  c.globalAlpha = 1;
+  if (def.lineas.length) {
+    let rem = clamp01(p / 0.55) * def.len;
+    for (const s of def.lineas) {
+      if (rem <= 0) break;
+      c.strokeStyle = s.col; c.lineWidth = s.w * lw;
+      c.beginPath(); c.moveTo(s.pts[0][0] * R, s.pts[0][1] * R);
+      for (let i = 1; i < s.pts.length; i++) {
+        const L = s.seg[i - 1];
+        if (rem >= L) { c.lineTo(s.pts[i][0] * R, s.pts[i][1] * R); rem -= L; }
+        else { const u = rem / L, a = s.pts[i - 1], b = s.pts[i]; c.lineTo((a[0] + (b[0] - a[0]) * u) * R, (a[1] + (b[1] - a[1]) * u) * R); rem = 0; break; }
+      }
+      c.stroke();
+    }
+  }
+  for (const g of def.glifos) {
+    const q = clamp01((p - g.d * 0.55) / 0.45);
+    if (q <= 0) continue;
+    const e = q < 1 ? backOut(q) : 1, s = 0.2 + 0.8 * e, m = def.pop ? 1 : e;
+    c.save();
+    c.globalAlpha = Math.min(1, q * 2.2);
+    c.translate(g.x * R * m, g.y * R * m);
+    c.rotate(g.rot + (1 - q) * (g.giro || 0));
+    if (g.r) {
+      c.beginPath(); c.arc(0, 0, g.r * R * s, 0, TAU); c.fillStyle = g.col; c.fill();
+      if (g.st) { c.strokeStyle = C.negro; c.lineWidth = g.st * lw; c.stroke(); }
+    } else {
+      const sx = (g.sx || 1) * s, sy = (g.sy || 1) * s;
+      c.scale(sx, sy);
+      glifo(c, g.ch, g.f, g.s * R, g.col, g.st ? g.st * lw / sx : 0);
+    }
+    c.restore();
+  }
+  c.globalAlpha = 1;
+}
+function sprite(def, R, lw, w, h, ox, oy) {
+  const s = document.createElement('canvas');
+  s.width = Math.max(1, Math.ceil(w)); s.height = Math.max(1, Math.ceil(h));
+  const c = s.getContext('2d');
+  c.translate(ox, oy);
+  drawDef(c, def, 1, R, lw);
+  return { cv: s, w: s.width, h: s.height, ox, oy };
+}
+
+/* ---------- Escena ---------- */
+let W = 0, H = 0, DPR = 1, S = 1, CX = 0, CY = 0, LWB = 1, papel = null;
+let FL = [], RAMAS = [], LAZO = null, AMB = [], FILAS = [], CINTA = [];
+const LETRAS = '¡BUENOSDÍAS!';
+const MINUS = 'abcdefghijlmnopqrstuvxyzñ';
+const VOZ = 'buenos días hoy es viernes y la ciudad despierta despacio con luz de noviembre café caliente ventanas abiertas un ramo de letras crece en papel cada palabra florece en cobalto limón y negro tallos finos hojas redondas un día nuevo empieza aquí'.split(' ');
+
+function crearEscena() {
+  const rng = rngF(20261127);
+  FL = [];
+  const defs = [['rosa', 0, 0.6, 0, 0.17]];
+  const t1 = ['aster', 'margarita', 'rosa', 'aster', 'margarita'];
+  for (let i = 0; i < 5; i++) { const a = i / 5 * TAU + 0.3; defs.push([t1[i], Math.cos(a) * 0.27, 0.44, Math.sin(a) * 0.27, 0.155]); }
+  const t2 = ['margarita', 'aster', 'rosa', 'margarita', 'rosa', 'aster'];
+  for (let i = 0; i < 6; i++) { const a = i / 6 * TAU + 0.3 + TAU / 12; defs.push([t2[i], Math.cos(a) * 0.46, 0.23, Math.sin(a) * 0.46, 0.148]); }
+  const order = [0, 1, 3, 5, 2, 4, 6, 8, 10, 7, 9, 11];
+  const SIGNOS = 'flores·luz·hoy·sí·día·';
+  defs.forEach((d, i) => {
+    const c = [d[1], d[2], d[3]], r = d[4];
+    let nx = c[0], ny = c[1] + 0.6, nz = c[2];
+    { const l = Math.hypot(nx, ny, nz); nx /= l; ny /= l; nz /= l; }
+    const hxz = Math.hypot(c[0], c[2]), ex = hxz > 1e-6 ? c[0] / hxz : 0, ez = hxz > 1e-6 ? c[2] / hxz : 0;
+    const E = [ex * 0.035, -0.92, ez * 0.035], T = [ex * 0.025, Y_CINTA, ez * 0.025];
+    const B = [c[0] - nx * r * 0.7, c[1] - ny * r * 0.7, c[2] - nz * r * 0.7];
+    const pts = [E, T, B, c], cum = [0];
+    for (let k = 1; k < 4; k++) cum.push(cum[k - 1] + Math.hypot(pts[k][0] - pts[k - 1][0], pts[k][1] - pts[k - 1][1], pts[k][2] - pts[k - 1][2]));
+    const tipo = d[0];
+    const def = tipo === 'rosa' ? makeRosa(rng) : tipo === 'aster' ? makeAster(rng) : makeMargarita(rng);
+    const idx = order.indexOf(i), tl = T0 + idx * STG;
+    const chispas = [];
+    for (let j = 0; j < 14; j++) {
+      const ch = SIGNOS[Math.floor(rng() * SIGNOS.length)];
+      chispas.push([rng() * TAU, 0.9 + rng() * 1.3, rng() * TAU, ch === '·' ? '•' : ch, [C.negro, C.cobalto, C.limon][j % 3], 9 + rng() * 6]);
+    }
+    const estela = [];
+    for (let k = 0; k < 6; k++) estela.push(pick(rng, MINUS));
+    FL.push({ tipo, c, r, n: [nx, ny, nz], rot: rng() * TAU, def, rev: makeReverso(tipo, rng), pts, cum, len: cum[3], stemLen: cum[2], tl, te: tl + ROCK, chispas, estela, letra: LETRAS[idx], dashA: rng() * TAU });
+  });
+  RAMAS = [];
+  for (let j = 0; j < 7; j++) {
+    const a = j / 7 * TAU + 0.2 + jit(rng, 0.25), ca = Math.cos(a), sa = Math.sin(a);
+    RAMAS.push({ a: [ca * 0.28, 0.06, sa * 0.28], b: [ca * 0.74, -0.06 + jit(rng, 0.08), sa * 0.74], def: makeHoja(rng), t0: T_HOJA + j * 0.11 });
+  }
+  for (let j = 0; j < 5; j++) {
+    const a = j / 5 * TAU + 0.9 + jit(rng, 0.3), ca = Math.cos(a), sa = Math.sin(a);
+    RAMAS.push({ a: [ca * 0.3, 0.22, sa * 0.3], b: [ca * 0.62, 0.62 + jit(rng, 0.08), sa * 0.62], def: makeSignos(rng), t0: T_HOJA + 0.4 + j * 0.12 });
+  }
+  LAZO = makeLazo();
+  AMB = [];
+  const palabras = ['¡hola!', 'luz', 'flor', 'sí', 'hoy', 'día'];
+  for (let k = 0; k < 24; k++) AMB.push([rng(), rng(), rng(), palabras[k % palabras.length]]);
+}
+
+// Texto del periódico y de la cinta (necesita la letra cargada para medir)
+function maquetar() {
+  const rng = rngF(271127);
+  FILAS = [];
+  const fila = (y, f, size, fuente, colFn) => {
+    const r = coneR(y) * 1.012, words = [];
+    let th = rng() * TAU, used = 0, k = Math.floor(rng() * fuente.length);
+    const gap = size * 0.42;
+    while (used < TAU - 0.05) {
+      const t = fuente[k % fuente.length]; k++;
+      const dth = gm(f, t).w * size / r, dg = gap / r;
+      if (used + dth > TAU) break;
+      words.push({ t, th: th - dth / 2, col: colFn(t) });
+      th -= dth + dg; used += dth + dg;
+    }
+    FILAS.push({ y, r, f, size, words });
+  };
+  fila(-0.16, '700', 0.06, ['BUENOS', 'DÍAS', '·'], (t) => (t === '·' ? C.cobalto : C.negro));
+  for (let i = 0; i < 10; i++) {
+    const y = -0.265 - i * 0.047;
+    fila(y, i % 3 === 1 ? 'italic 400' : '400', 0.029, VOZ, () => (rng() < 0.12 ? C.cobalto : C.negro));
+  }
+  CINTA = [];
+  {
+    const r = coneR(Y_CINTA) * 1.05 + 0.014, size = 0.026, f = '700';
+    const fuente = ['RAMO', 'DEL', 'DÍA', '·', 'VIERNES', '27', '·'];
+    let th = Math.PI / 2 + 0.55, used = 0, k = 0;
+    while (used < TAU - 0.1) {
+      const t = fuente[k % fuente.length]; k++;
+      const dth = gm(f, t).w * size / r, dg = size * 0.5 / r;
+      if (used + dth > TAU) break;
+      CINTA.push({ t, th: th - dth / 2 });
+      th -= dth + dg; used += dth + dg;
+    }
+    CINTA.r = r; CINTA.size = size; CINTA.f = f;
+  }
+}
+
+function hacerPapel() {
+  papel = document.createElement('canvas');
+  papel.width = W; papel.height = H;
+  const c = papel.getContext('2d'), rng = rngF(3);
+  c.fillStyle = C.papel; c.fillRect(0, 0, W, H);
+  // retícula de líneas base, muy tenue
+  c.strokeStyle = 'rgba(37,71,201,0.045)'; c.lineWidth = Math.max(1, 0.6 * DPR);
+  const paso = 9 * DPR;
+  for (let y = paso; y < H; y += paso) { c.beginPath(); c.moveTo(0, Math.round(y) + 0.5); c.lineTo(W, Math.round(y) + 0.5); c.stroke(); }
+  // número gigante del día
+  c.save();
+  c.textAlign = 'center'; c.textBaseline = 'alphabetic';
+  const px = Math.min(W * 1.05, H * 0.62);
+  c.font = `italic 400 ${px}px ${FAM}`;
+  c.fillStyle = 'rgba(37,71,201,0.055)';
+  c.fillText('27', W * 0.5, H * 0.56 + px * 0.34);
+  c.restore();
+  // grano de papel
+  const n = Math.round(W * H / 650);
+  for (let i = 0; i < n; i++) {
+    c.fillStyle = rng() < 0.65 ? `rgba(20,20,20,${0.025 + rng() * 0.04})` : `rgba(255,255,255,${0.2 + rng() * 0.25})`;
+    const s = (0.6 + rng() * 1.2) * DPR;
+    c.fillRect(rng() * W, rng() * H, s, s);
+  }
+  // marcas de corte en las esquinas
+  c.strokeStyle = 'rgba(20,20,20,0.35)'; c.lineWidth = Math.max(1, 0.7 * DPR);
+  const m = 12 * DPR, l = 10 * DPR;
+  for (const [x, y, sx, sy] of [[m, m, 1, 1], [W - m, m, -1, 1], [m, H - m, 1, -1], [W - m, H - m, -1, -1]]) {
+    c.beginPath(); c.moveTo(x, y + sy * l); c.lineTo(x, y); c.lineTo(x + sx * l, y); c.stroke();
+  }
+  const g = c.createRadialGradient(W / 2, H * 0.52, Math.min(W, H) * 0.3, W / 2, H * 0.52, Math.max(W, H) * 0.78);
+  g.addColorStop(0, 'rgba(20,20,20,0)'); g.addColorStop(1, 'rgba(20,20,20,0.07)');
+  c.fillStyle = g; c.fillRect(0, 0, W, H);
+}
+
+function hacerSprites() {
+  for (const f of FL) {
+    const R = f.r * S, sz = R * 2.7;
+    f.spr = sprite(f.def, R, LWB, sz, sz, sz / 2, sz / 2);
+    f.sprR = sprite(f.rev, R, LWB, sz, sz, sz / 2, sz / 2);
+  }
+  for (const r of RAMAS) {
+    const L0 = 0.48 * S;
+    r.L0 = L0;
+    r.spr = sprite(r.def, L0, LWB, L0 * 1.2 + 8 * DPR, L0 * 0.56, 4 * DPR, L0 * 0.28);
+  }
+  const RB = 0.11 * S;
+  LAZO.R = RB;
+  LAZO.spr = sprite(LAZO, RB, LWB, RB * 2.8, RB * 2.6, RB * 1.4, RB * 1.25);
+}
+
+function resize() {
+  DPR = Math.min(window.devicePixelRatio || 1, 3);
+  W = Math.round(window.innerWidth * DPR); H = Math.round(window.innerHeight * DPR);
+  cv.width = W; cv.height = H;
+  S = Math.min(H * 0.72 / 1.75, W * 0.84 / 1.3);
+  CX = W / 2; CY = H * 0.57 - 0.085 * S;
+  LWB = 1.35 * DPR * Math.max(0.85, Math.min(1.3, S / (240 * DPR)));
+  maquetar();
+  hacerPapel();
+  hacerSprites();
+}
+
+/* ---------- Dibujo por fotograma ---------- */
+function pathAt(f, L) {
+  const p = f.pts, c = f.cum;
+  let k = 0;
+  while (k < 2 && c[k + 1] < L) k++;
+  const u = clamp01((L - c[k]) / ((c[k + 1] - c[k]) || 1)), a = p[k], b = p[k + 1];
+  return [a[0] + (b[0] - a[0]) * u, a[1] + (b[1] - a[1]) * u, a[2] + (b[2] - a[2]) * u];
+}
+
+function dibujarTallo(f, L) {
+  const pts = [proj(...f.pts[0])];
+  for (let k = 1; k < 3; k++) {
+    if (f.cum[k] <= L) pts.push(proj(...f.pts[k]));
+    else { pts.push(proj(...pathAt(f, L))); break; }
+  }
+  ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+  ctx.strokeStyle = C.negro; ctx.lineWidth = LWB * 0.9;
+  ctx.beginPath(); ctx.moveTo(pts[0].x, pts[0].y);
+  for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
+  ctx.stroke();
+}
+
+function dibujarFlor(f, t) {
+  const P = proj(...f.c), N = rotN(...f.n);
+  const p = clamp01((t - f.te - 0.05) / DRAW);
+  if (p <= 0) return;
+  const fac = 0.5 + 0.5 * Math.abs(N[2]);
+  const th = Math.atan2(-N[1], N[0]);
+  ctx.save();
+  ctx.translate(P.x, P.y);
+  ctx.rotate(th); ctx.scale(fac, 1); ctx.rotate(-th + f.rot);
+  if (p < 1) drawDef(ctx, f.def, p, f.r * S * P.k, LWB);
+  else {
+    const s = N[2] < -0.3 ? f.sprR : f.spr;
+    ctx.drawImage(s.cv, -s.ox * P.k, -s.oy * P.k, s.w * P.k, s.h * P.k);
+  }
+  ctx.restore();
+}
+
+function dibujarRama(r, t) {
+  const g = eo2(clamp01((t - r.t0) / 0.75));
+  if (g <= 0) return;
+  const A = proj(...r.a), B = proj(...r.b);
+  const dx = B.x - A.x, dy = B.y - A.y, len = Math.hypot(dx, dy);
+  if (len < 1) return;
+  const sc = len / r.L0;
+  ctx.save();
+  ctx.translate(A.x, A.y); ctx.rotate(Math.atan2(dy, dx)); ctx.scale(sc, sc);
+  if (g < 1) drawDef(ctx, r.def, g, r.L0, LWB / sc);
+  else ctx.drawImage(r.spr.cv, -r.spr.ox, -r.spr.oy);
+  ctx.restore();
+}
+
+function aro(y0fn, rfn, n) {
+  const out = [];
+  for (let i = 0; i < n; i++) {
+    const th = i / n * TAU, y = y0fn(th), r = rfn(y, th);
+    const P = proj(Math.cos(th) * r, y, Math.sin(th) * r);
+    P.th = th; out.push(P);
+  }
+  return out;
+}
+function envolvente(pts) {
+  const p = pts.slice().sort((a, b) => a.x - b.x || a.y - b.y);
+  const cr = (o, a, b) => (a.x - o.x) * (b.y - o.y) - (a.y - o.y) * (b.x - o.x);
+  const lo = [], up = [];
+  for (const q of p) { while (lo.length >= 2 && cr(lo[lo.length - 2], lo[lo.length - 1], q) <= 0) lo.pop(); lo.push(q); }
+  for (let i = p.length - 1; i >= 0; i--) { const q = p[i]; while (up.length >= 2 && cr(up[up.length - 2], up[up.length - 1], q) <= 0) up.pop(); up.push(q); }
+  return lo.slice(0, -1).concat(up.slice(0, -1));
+}
+function arcoFrontal(pts) {
+  const n = pts.length;
+  let i0 = -1;
+  for (let i = 0; i < n; i++) if (pts[(i - 1 + n) % n].z < 0 && pts[i].z >= 0) { i0 = i; break; }
+  if (i0 < 0) return pts.slice();
+  const arc = [];
+  for (let k = 0; k < n; k++) { const q = pts[(i0 + k) % n]; if (q.z < 0) break; arc.push(q); }
+  return arc;
+}
+
+let conoCache = null;
+function calcularCono() {
+  const N = 84;
+  const top = aro(yTop, (y) => coneR(y), N);
+  const bot = aro(() => YB, () => R0, N);
+  conoCache = { top, bot, hull: envolvente(top.concat(bot)), N };
+}
+function clipCono(q) {
+  if (q >= 1) return;
+  const yb = proj(0, YB - 0.05, 0).y, yt = proj(0, 0.3, 0).y;
+  const y = yb + (yt - yb) * eo2(q);
+  ctx.beginPath(); ctx.rect(0, y, W, H - y); ctx.clip();
+}
+function dibujarConoInterior(q) {
+  const { hull } = conoCache;
+  ctx.save(); clipCono(q);
+  ctx.fillStyle = C.diarioO;
+  ctx.beginPath(); ctx.moveTo(hull[0].x, hull[0].y);
+  for (const p of hull) ctx.lineTo(p.x, p.y);
+  ctx.closePath(); ctx.fill();
+  ctx.restore();
+}
+function trazoFila(y, r, lw, col) {
+  ctx.strokeStyle = col; ctx.lineWidth = lw;
+  ctx.beginPath();
+  let on = false;
+  for (let i = 0; i <= 96; i++) {
+    const th = i / 96 * TAU, c = Math.cos(th), s = Math.sin(th);
+    const vis = rotN(c, 0, s)[2] > 0.02 && y < yTop(th) - 0.02;
+    if (!vis) { on = false; continue; }
+    const P = proj(c * r, y, s * r);
+    if (!on) { ctx.moveTo(P.x, P.y); on = true; } else ctx.lineTo(P.x, P.y);
+  }
+  ctx.stroke();
+}
+function palabraSobre(th, y, r, txt, px, alto) {
+  const c = Math.cos(th), s = Math.sin(th), fz = rotN(c, 0, s)[2];
+  if (fz < 0.1) return false;
+  const P = proj(c * r, y, s * r), P2 = proj(Math.cos(th - 0.03) * r, y, Math.sin(th - 0.03) * r);
+  const ang = Math.atan2(P2.y - P.y, P2.x - P.x), ca = Math.cos(ang), sa = Math.sin(ang), k = P.k;
+  ctx.globalAlpha = Math.min(1, 0.2 + fz * 0.95);
+  ctx.setTransform(ca * fz * k, sa * fz * k, -sa * k, ca * k, P.x, P.y);
+  ctx.fillText(txt, 0, alto);
+  return true;
+}
+function dibujarConoFrente(q) {
+  const { top, bot, N } = conoCache;
+  const arc = arcoFrontal(top);
+  if (arc.length < 2) return;
+  const idx = arc.map((p) => Math.round(p.th / TAU * N) % N);
+  const barc = idx.map((i) => bot[i]);
+  ctx.save(); clipCono(q);
+  ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+  const forma = () => {
+    ctx.beginPath(); ctx.moveTo(arc[0].x, arc[0].y);
+    for (const p of arc) ctx.lineTo(p.x, p.y);
+    for (let i = barc.length - 1; i >= 0; i--) ctx.lineTo(barc[i].x, barc[i].y);
+    ctx.closePath();
+  };
+  // sombra desplazada en amarillo, como un registro corrido
+  ctx.save(); ctx.translate(3 * DPR, 2.5 * DPR); forma(); ctx.fillStyle = C.limon; ctx.fill(); ctx.restore();
+  forma(); ctx.fillStyle = C.diario; ctx.fill();
+  ctx.save(); forma(); ctx.clip();
+  // columnas de texto del periódico
+  ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic';
+  for (const fl of FILAS) {
+    const px = fl.size * S;
+    ctx.font = `${fl.f} ${px}px ${FAM}`;
+    for (const w of fl.words) {
+      if (fl.y > yTop(w.th) - fl.size * 0.75 - 0.012) continue;
+      ctx.fillStyle = w.col;
+      palabraSobre(w.th, fl.y, fl.r, w.t, px * 0.36, px * 0.36);
+    }
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+  }
+  ctx.globalAlpha = 1;
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  // filetes de la cabecera del periódico
+  trazoFila(-0.112, coneR(-0.112) * 1.012, LWB * 0.7, C.negro);
+  trazoFila(-0.2, coneR(-0.2) * 1.012, LWB * 0.5, C.negro);
+  trazoFila(-0.207, coneR(-0.207) * 1.012, LWB * 0.5, C.negro);
+  // sombra a la derecha
+  const mid = Math.floor(arc.length * 0.64);
+  ctx.fillStyle = 'rgba(20,20,20,0.08)';
+  ctx.beginPath(); ctx.moveTo(arc[mid].x, arc[mid].y);
+  for (let i = mid; i < arc.length; i++) ctx.lineTo(arc[i].x, arc[i].y);
+  for (let i = barc.length - 1; i >= mid; i--) ctx.lineTo(barc[i].x, barc[i].y);
+  ctx.closePath(); ctx.fill();
+  ctx.restore();
+  // contorno
+  ctx.strokeStyle = C.negro; ctx.lineWidth = LWB * 1.05;
+  ctx.beginPath(); ctx.moveTo(barc[0].x, barc[0].y);
+  for (const p of arc) ctx.lineTo(p.x, p.y);
+  for (let i = barc.length - 1; i >= 0; i--) ctx.lineTo(barc[i].x, barc[i].y);
+  ctx.stroke();
+  ctx.restore();
+}
+function dibujarBordeTrasero(q) {
+  const { top } = conoCache;
+  ctx.save(); clipCono(q);
+  ctx.strokeStyle = C.negro; ctx.lineWidth = LWB * 0.8; ctx.lineJoin = 'round';
+  ctx.beginPath();
+  let on = false;
+  for (let k = 0; k <= top.length; k++) {
+    const p = top[k % top.length];
+    if (p.z < 0) { if (!on) { ctx.moveTo(p.x, p.y); on = true; } else ctx.lineTo(p.x, p.y); } else on = false;
+  }
+  ctx.stroke();
+  ctx.restore();
+}
+const distFrente = (th) => Math.abs(((th - Math.PI / 2 + 3 * Math.PI) % TAU) - Math.PI);
+function dibujarCinta(t) {
+  const q = clamp01((t - T_CINTA) / D_CINTA);
+  if (q <= 0) return;
+  const r = CINTA.r, n = 72, pts = [];
+  for (let i = 0; i <= n; i++) {
+    const th = i / n * TAU;
+    const P = proj(Math.cos(th) * r, Y_CINTA, Math.sin(th) * r);
+    P.ok = P.z >= -0.01 && distFrente(th) <= q * Math.PI + 0.01;
+    pts.push(P);
+  }
+  const bw = 0.05 * S;
+  const tramos = [];
+  let cur = null;
+  for (const p of pts) { if (p.ok) { if (!cur) { cur = []; tramos.push(cur); } cur.push(p); } else cur = null; }
+  ctx.lineCap = 'butt'; ctx.lineJoin = 'round';
+  for (const tr of tramos) {
+    if (tr.length < 2) continue;
+    ctx.strokeStyle = C.cobalto; ctx.lineWidth = bw * tr[0].k;
+    ctx.beginPath(); ctx.moveTo(tr[0].x, tr[0].y); for (const p of tr) ctx.lineTo(p.x, p.y); ctx.stroke();
+  }
+  // texto en la cinta
+  ctx.save();
+  const px = CINTA.size * S;
+  ctx.font = `${CINTA.f} ${px}px ${FAM}`;
+  ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic'; ctx.fillStyle = C.limon;
+  for (const w of CINTA) {
+    if (distFrente(w.th) > q * Math.PI) continue;
+    palabraSobre(w.th, Y_CINTA, r, w.t, 0, px * 0.36);
+  }
+  ctx.restore();
+}
+function dibujarLazo(t) {
+  if (t < T_LAZO) return;
+  const u = clamp01((t - T_LAZO) / D_LAZO), s = u < 1 ? Math.max(0, backOut(u)) : 1;
+  const r = CINTA.r + 0.02;
+  const P = proj(0, Y_CINTA, r), N = rotN(0, 0, 1);
+  if (N[2] < 0.12) return;
+  const sp = LAZO.spr;
+  ctx.save();
+  ctx.translate(P.x, P.y);
+  ctx.rotate((1 - Math.min(1, s)) * -0.6);
+  ctx.scale(N[2] * s * P.k, s * P.k);
+  ctx.drawImage(sp.cv, -sp.ox, -sp.oy);
+  ctx.restore();
+}
+
+function dibujarCohete(f, t, fi) {
+  const u = (t - f.tl) / ROCK;
+  const pos = proj(...pathAt(f, eo2(u) * f.len));
+  ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+  for (let k = 1; k <= 6; k++) {
+    const uk = u - k * 0.035; if (uk < 0) break;
+    const q = proj(...pathAt(f, eo2(uk) * f.len));
+    const h = Math.sin(fi * 31 + k * 7 + t * 30);
+    ctx.globalAlpha = 0.8 - k * 0.12;
+    ctx.save(); ctx.translate(q.x + h * 4 * DPR, q.y + k * 1.5 * DPR); ctx.rotate(k * 0.7 + fi + t * 4);
+    glifo(ctx, f.estela[k - 1], 'italic 400', (12 - k) * DPR, k % 2 ? C.negro : C.cobalto, 0);
+    ctx.restore();
+  }
+  ctx.globalAlpha = 1;
+  ctx.save(); ctx.translate(pos.x, pos.y); ctx.rotate(Math.sin(t * 9 + fi) * 0.15);
+  glifo(ctx, f.letra, '700', 24 * DPR, C.cobalto, 0);
+  ctx.restore();
+}
+function dibujarEstallido(f, t) {
+  const tau = t - f.te;
+  if (tau < 0 || tau > 1.05) return;
+  const P = proj(...f.c), R = f.r * S * P.k;
+  ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+  if (tau < BURST) {
+    const u = tau / BURST, e = eo3(u);
+    // la letra del cohete se agranda y se desvanece
+    ctx.globalAlpha = 0.9 * (1 - u);
+    ctx.save(); ctx.translate(P.x, P.y); ctx.scale(1 + 3.2 * e, 1 + 3.2 * e);
+    glifo(ctx, f.letra, '700', 24 * DPR, C.cobalto, 0);
+    ctx.restore();
+    // filetes que salen disparados
+    ctx.strokeStyle = C.negro; ctx.lineWidth = LWB * (1 - 0.5 * u); ctx.lineCap = 'butt';
+    ctx.globalAlpha = 1 - u * u;
+    for (let j = 0; j < 16; j++) {
+      const a = f.dashA + j / 16 * TAU, r1 = R * (0.35 + 1.1 * e), r2 = R * (0.5 + 1.5 * e) * (1 - 0.25 * u);
+      ctx.beginPath(); ctx.moveTo(P.x + Math.cos(a) * r1, P.y + Math.sin(a) * r1); ctx.lineTo(P.x + Math.cos(a) * r2, P.y + Math.sin(a) * r2); ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
+  }
+  const e2 = 1 - Math.exp(-4 * tau);
+  for (const [a, d, rot, ch, col, sz] of f.chispas) {
+    const al = 1 - tau / 1.0; if (al <= 0) continue;
+    ctx.globalAlpha = al;
+    ctx.save();
+    ctx.translate(P.x + Math.cos(a) * R * d * e2, P.y + Math.sin(a) * R * d * e2 + R * 0.7 * tau * tau);
+    ctx.rotate(rot + tau * 5);
+    glifo(ctx, ch, 'italic 600', sz * DPR, col, col === C.limon ? 0.9 * DPR : 0);
+    ctx.restore();
+  }
+  ctx.globalAlpha = 1;
+}
+function dibujarAmbiente(t) {
+  if (t < T_ROT) return;
+  const per = 2.4, base = T_ROT + 0.4, kmax = Math.floor((t - base) / per);
+  ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+  for (let k = Math.max(0, kmax - 1); k <= kmax; k++) {
+    const tau = t - (base + k * per); if (tau < 0 || tau > 1.4) continue;
+    const e = AMB[k % AMB.length];
+    const lado = k % 2 ? 1 : -1;
+    const x = W * 0.5 + lado * W * (0.24 + e[0] * 0.14), y = H * (0.25 + e[1] * 0.07), R = S * 0.1;
+    const u = clamp01(tau / 0.7), ee = eo3(u);
+    const al = 0.7 * (1 - clamp01((tau - 0.5) / 0.9));
+    ctx.globalAlpha = al * 0.6;
+    ctx.strokeStyle = C.negro; ctx.lineWidth = LWB * 0.6; ctx.lineCap = 'butt';
+    for (let j = 0; j < 12; j++) {
+      const a = j / 12 * TAU + e[2] * 3, r1 = R * (0.25 + 0.8 * ee), r2 = R * (0.45 + 1.1 * ee);
+      ctx.beginPath(); ctx.moveTo(x + Math.cos(a) * r1, y + Math.sin(a) * r1); ctx.lineTo(x + Math.cos(a) * r2, y + Math.sin(a) * r2); ctx.stroke();
+    }
+    const word = e[3];
+    for (let j = 0; j < word.length; j++) {
+      const a = j / word.length * TAU + e[2] * 4, d = R * 1.5 * (1 - Math.exp(-3 * tau));
+      ctx.globalAlpha = al;
+      ctx.save();
+      ctx.translate(x + Math.cos(a) * d, y + Math.sin(a) * d + R * 0.5 * tau * tau);
+      ctx.rotate(a + Math.PI / 2);
+      const col = [C.cobalto, C.negro, C.limon][(k + j) % 3];
+      glifo(ctx, word[j], 'italic 600', 11 * DPR, col, col === C.limon ? 0.8 * DPR : 0);
+      ctx.restore();
+    }
+    ctx.globalAlpha = 1;
+  }
+}
+
+function render(t) {
+  let a = 0; BOB = 0;
+  if (t > T_ROT) {
+    const dt = t - T_ROT;
+    a = ((TAU / PERIOD) * (dt - RAMP * (1 - Math.exp(-dt / RAMP)))) % TAU;
+    BOB = 0.02 * Math.sin(dt * 1.4) * Math.min(1, dt / 2);
+  }
+  CA = Math.cos(a); SA = Math.sin(a);
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.globalAlpha = 1;
+  ctx.drawImage(papel, 0, 0);
+  dibujarAmbiente(t);
+
+  const qC = clamp01((t - T_CONO) / D_CONO);
+  if (qC > 0) { calcularCono(); dibujarConoInterior(qC); dibujarBordeTrasero(qC); }
+
+  for (const f of FL) {
+    if (t < f.tl) continue;
+    const L = t < f.te ? eo2((t - f.tl) / ROCK) * f.len : f.len;
+    dibujarTallo(f, Math.min(L, f.stemLen));
+  }
+
+  const items = [];
+  for (const f of FL) if (t > f.te) items.push({ z: proj(...f.c).z, d: () => dibujarFlor(f, t) });
+  for (const r of RAMAS) if (t > r.t0) items.push({ z: proj((r.a[0] + r.b[0]) / 2, (r.a[1] + r.b[1]) / 2, (r.a[2] + r.b[2]) / 2).z - 0.05, d: () => dibujarRama(r, t) });
+  items.sort((p, q) => p.z - q.z);
+  for (const it of items) it.d();
+
+  if (qC > 0) dibujarConoFrente(qC);
+  dibujarCinta(t);
+  dibujarLazo(t);
+
+  FL.forEach((f, i) => { if (t >= f.tl && t < f.te) dibujarCohete(f, t, i); dibujarEstallido(f, t); });
+}
+
+/* ---------- Bucle ---------- */
+const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+let tStart = performance.now();
+function reiniciar() { tStart = performance.now() - (reduce ? (T_ROT + 0.2) * 1000 : 0); }
+if (reduce) PERIOD = 16;
+function loop(now) {
+  render((now - tStart) / 1000);
+  requestAnimationFrame(loop);
+}
+window.addEventListener('pointerdown', reiniciar);
+let rt = 0;
+window.addEventListener('resize', () => { clearTimeout(rt); rt = setTimeout(resize, 150); });
+
+crearEscena();
+resize();
+reiniciar();
+requestAnimationFrame(loop);
+setTimeout(() => { cab.classList.add('on'); pie.classList.add('on'); }, 250);
+// Cuando llega la Bodoni, se vuelven a medir y dibujar las letras
+if (document.fonts && document.fonts.load) {
+  Promise.all(['400', '700', 'italic 400', 'italic 600'].map((f) => document.fonts.load(`${f} 40px "Bodoni Moda"`, 'aOñ&*¡')))
+    .then(() => { GM.clear(); resize(); })
+    .catch(() => {});
+}
+})();
+</script>
+<!-- Galería «Ramos» -->
+<script>window.GALERIA_TEMA = { modo: 'papel', fondo: '#f5f1ea', fondo2: '#e9e2d4', texto: '#141414', acento: '#2547c9', suave: '#5e5a50', borde: '#141414', celda: '#ece5d6', fTitulo: '"Bodoni Moda","Bodoni 72",Didot,Georgia,serif', fTexto: '"Bodoni Moda","Bodoni 72",Didot,Georgia,serif', tamTitulo: '44px', tamTexto: '18px' };</script>
+<script src="../dias.js"></script>
+<script src="../galeria.js"></script>
+</body>
+</html>
