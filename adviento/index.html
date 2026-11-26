@@ -83,6 +83,12 @@
   .premio.entra>*:nth-child(2){animation-delay:.18s}
   @keyframes sube{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:none}}
   @media (prefers-reduced-motion:reduce){.puerta.entra .tarjeta,.puerta.entra,.premio.entra>*{animation:none}.giro{transition:none}}
+  .reloj{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:6px 0 4px}
+  .reloj div{display:flex;flex-direction:column;align-items:center;gap:6px;padding:12px 4px 10px;border-radius:10px;
+    background:linear-gradient(160deg,#8f2638,#5c1424);box-shadow:inset 0 0 0 1px rgba(212,175,55,.6),0 4px 10px rgba(60,20,20,.25)}
+  .reloj b{font:500 34px/1 var(--f);color:#fff5dc;font-variant-numeric:tabular-nums}
+  .reloj span{font:600 10px/1 var(--f);letter-spacing:.18em;text-transform:uppercase;color:#f0d77a}
+  .ca-pie{margin:14px 0 0}
   .volver{position:fixed;top:calc(14px + env(safe-area-inset-top,0px));left:calc(14px + env(safe-area-inset-left,0px));z-index:5;
     font:italic 500 16px/1 var(--f);color:var(--nieve);text-decoration:none;padding:9px 14px 10px;border-radius:999px;
     background:rgba(12,21,48,.6);border:1px solid rgba(212,175,55,.5);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px)}
@@ -106,6 +112,23 @@
 </header>
 <div class="maqueta" id="maqueta" hidden>Maqueta · como si fuera 1 de diciembre</div>
 <a class="volver" href="../">← Ramo del día</a>
+<section class="puerta" id="cuentaAtras" role="dialog" aria-modal="true" aria-labelledby="caTitulo" hidden>
+  <div class="tarjeta">
+    <button class="cerrar" id="caCerrar" type="button" aria-label="Cerrar">×</button>
+    <div class="t-cab">
+      <small>Calendario de Adviento</small>
+      <h2 id="caTitulo">Casa 1</h2>
+    </div>
+    <p class="t-sub">Se abre el 1 de diciembre a las 12:00</p>
+    <div class="reloj" role="timer" aria-live="off">
+      <div><b id="caDias">0</b><span id="caDiasTxt">días</span></div>
+      <div><b id="caHoras">00</b><span>horas</span></div>
+      <div><b id="caMin">00</b><span>min</span></div>
+      <div><b id="caSeg">00</b><span>seg</span></div>
+    </div>
+    <p class="t-sub ca-pie">Vuelve a esa hora: detrás de esta puerta hay un juego y un regalo.</p>
+  </div>
+</section>
 <main class="solo" id="solo" hidden>
   <h1>Calendario de Adviento</h1>
   <p>Este calendario solo se abre desde el móvil.</p>
@@ -148,7 +171,10 @@ if (!window.ES_MOVIL) {
 /* ---------- Ajustes ---------- */
 // Versión real: usa la fecha del servidor. (Para probar, poner aquí una fecha como '2026-12-01T09:00'.)
 const MAQUETA = '';
-const ANIO = 2026, HORA_APERTURA = 7, ZONA = 'Europe/Madrid';
+// Cada casa se abre a las 12:00 (hora de Madrid) de su día: la 1 el 1 de diciembre, la 2 el día 2… hasta la 24.
+const ANIO = 2026, HORA_APERTURA = 12, ZONA = 'Europe/Madrid';
+const APERTURA_1 = new Date('2026-12-01T12:00:00+01:00');
+let DESFASE = 0; // diferencia entre la hora del servidor y la del móvil (ms)
 const DIAS = {
   1: { juego: 'parejas',
        msg: 'Empieza diciembre y empieza la cuenta atrás: veinticuatro puertas, una cada mañana. Esta es la primera, y ya tiene premio.',
@@ -163,7 +189,7 @@ async function horaFiable() {
   try {
     const r = await fetch(location.href.split('#')[0], { method: 'HEAD', cache: 'no-store' });
     const d = r.headers.get('date');
-    if (d) return { fecha: new Date(d), fiable: true };
+    if (d) { const f = new Date(d); DESFASE = f.getTime() - Date.now(); return { fecha: f, fiable: true }; }
   } catch (e) { /* sin conexión */ }
   return { fecha: new Date(), fiable: false };
 }
@@ -756,7 +782,8 @@ cv.addEventListener('pointerdown', (e) => {
   const b = cv.getBoundingClientRect(), x = (e.clientX - b.left) * DPR, y = (e.clientY - b.top) * DPR;
   const c = CASAS.slice().reverse().find((k) => k.caja && x >= k.caja.x && x <= k.caja.x + k.caja.w && y >= k.caja.y && y <= k.caja.y + k.caja.h);
   if (!c) return;
-  if (c.n > ABIERTO) { c.temblor = 0.4; avisar(`Esta casa se abre el ${c.n} de diciembre`); return; }
+  if (c.n === 1 && ABIERTO === 0) { abrirCuenta(); return; }
+  if (c.n > ABIERTO) { c.temblor = 0.4; avisar(`Esta casa se abre el ${c.n} de diciembre a las 12:00`); return; }
   if (!DIAS[c.n]) { avisar('Esta puerta todavía se está preparando'); return; }
   const t = performance.now() / 1000;
   ANIM = { casa: c, t0: t, d: hechos.has(c.n) ? 0.45 : 0.9, fin: () => abrirTarjeta(c) };
@@ -876,6 +903,29 @@ function parejas(n) {
 document.getElementById('pCerrar').addEventListener('click', cerrarTarjeta);
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !puerta.hidden) cerrarTarjeta(); });
 
+/* ---------- Cuenta atrás de la casa 1 ---------- */
+const cuentaSec = document.getElementById('cuentaAtras');
+let relojCuenta = 0;
+function pintarCuenta() {
+  const falta = APERTURA_1.getTime() - (Date.now() + DESFASE);
+  if (falta <= 0) { clearInterval(relojCuenta); location.reload(); return; }
+  const s = Math.floor(falta / 1000), d = Math.floor(s / 86400), h = Math.floor(s / 3600) % 24, m = Math.floor(s / 60) % 60, sg = s % 60;
+  const p2 = (n) => String(n).padStart(2, '0');
+  document.getElementById('caDias').textContent = String(d);
+  document.getElementById('caHoras').textContent = p2(h);
+  document.getElementById('caMin').textContent = p2(m);
+  document.getElementById('caSeg').textContent = p2(sg);
+  document.getElementById('caDiasTxt').textContent = d === 1 ? 'día' : 'días';
+}
+function abrirCuenta() {
+  pintarCuenta();
+  cuentaSec.hidden = false; cuentaSec.classList.remove('entra'); void cuentaSec.offsetWidth; cuentaSec.classList.add('entra');
+  clearInterval(relojCuenta); relojCuenta = setInterval(pintarCuenta, 1000);
+}
+function cerrarCuenta() { cuentaSec.hidden = true; clearInterval(relojCuenta); }
+document.getElementById('caCerrar').addEventListener('click', cerrarCuenta);
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !cuentaSec.hidden) cerrarCuenta(); });
+
 /* ---------- Arranque ---------- */
 (async () => {
   const { fecha, fiable } = await horaFiable();
@@ -885,7 +935,7 @@ document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !puerta.
   if (p.m === 12) hoyTxt.textContent = `${p.d} de ${MESES[p.m - 1]}`;
   if (!fiable) cuenta.textContent = 'Conéctate a internet para abrir las casas';
   else if (ABIERTO >= 24) cuenta.textContent = 'Feliz Nochebuena';
-  else if (ABIERTO === 0) cuenta.textContent = 'La primera casa se abre el 1 de diciembre';
+  else if (ABIERTO === 0) cuenta.textContent = 'La primera casa se abre el 1 de diciembre a las 12:00';
   else { const q = 24 - ABIERTO; cuenta.textContent = q === 1 ? 'Queda 1 día para Nochebuena' : `Quedan ${q} días para Nochebuena`; }
   for (const k of CASAS) k.spr = {};
 })();
