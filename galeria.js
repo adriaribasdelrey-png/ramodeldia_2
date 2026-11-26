@@ -25,6 +25,10 @@
     ${PIXEL ? 'border:0;' : 'backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);'}${PIXEL ? marco : `border:1px solid ${T.borde};border-radius:999px;`}
     -webkit-tap-highlight-color:transparent}
   .gr canvas{position:static;left:auto;top:auto;transform:none;margin:0}
+  .gr-adv{top:auto;right:auto;left:50%;bottom:calc(22px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);
+    text-decoration:none;font-size:18px;white-space:nowrap;padding:10px 20px 11px;
+    color:${T.fondo};background:${T.acento};${PIXEL ? '' : 'border-color:transparent;box-shadow:0 6px 18px rgba(0,0,0,.22);'}}
+  .gr-adv:active{transform:translate(-50%,1px)}
   .gr-btn:active{transform:translate(1px,1px)}
   .gr-btn:focus-visible,.gr-cerrar:focus-visible,.gr-celda:focus-visible{outline:2px solid ${T.acento};outline-offset:3px}
   .gr{position:fixed;inset:0;z-index:60;overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;touch-action:pan-y;background:${T.fondo};color:${T.texto}}
@@ -66,6 +70,9 @@
   const btn = document.createElement('button');
   btn.type = 'button'; btn.className = 'gr-btn'; btn.setAttribute('aria-haspopup', 'dialog');
   btn.textContent = 'Ramos';
+  // Botón del calendario de Adviento, vestido con los colores del ramo del día.
+  const adv = document.createElement('a');
+  adv.className = 'gr-btn gr-adv'; adv.href = '../adviento/'; adv.textContent = 'Calendario de Adviento';
 
   const gal = document.createElement('section');
   gal.className = 'gr'; gal.hidden = true;
@@ -87,10 +94,10 @@
   ley.append(l1, l2);
   pag.append(cab, bloques, ley);
   gal.append(fondo, pag);
-  document.body.append(btn, gal);
+  document.body.append(btn, adv, gal);
 
-  // Que tocar el botón o la galería no reinicie la animación de debajo.
-  for (const el of [btn, gal]) for (const ev of ['pointerdown', 'mousedown', 'touchstart', 'keydown']) el.addEventListener(ev, (e) => e.stopPropagation());
+  // Que tocar los botones o la galería no reinicie la animación de debajo.
+  for (const el of [btn, adv, gal]) for (const ev of ['pointerdown', 'mousedown', 'touchstart', 'keydown']) el.addEventListener(ev, (e) => e.stopPropagation());
 
   /* ---------- Datos ---------- */
   const p2 = (n) => String(n).padStart(2, '0');
