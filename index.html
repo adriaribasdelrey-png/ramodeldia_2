@@ -6,30 +6,101 @@
 <title>Ramo del día</title>
 <meta name="robots" content="noindex, nofollow">
 <meta name="theme-color" content="#0d0206">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;1,400;1,500&display=swap">
 <style>
-  html,body{margin:0;height:100%;background:#0d0206;color:#d4bd98}
-  body{display:flex;align-items:center;justify-content:center;font:italic 18px/1.4 Georgia,serif;text-align:center}
-  a{color:#ecdcbd}
+  /* Portada: se viste con los colores del ramo del día (los pone el script) */
+  :root{--fondo:#0d0206;--texto:#f3ead8;--suave:rgba(243,234,216,.7);--acento:#d9625f;--sobre:#0d0206;
+    --f:"Cormorant Garamond","Iowan Old Style",Georgia,serif}
+  [hidden]{display:none!important}
+  html,body{margin:0;height:100%;background:var(--fondo);color:var(--texto);-webkit-tap-highlight-color:transparent}
+  body{display:flex;align-items:center;justify-content:center;text-align:center;
+    background:radial-gradient(ellipse at 50% 35%,color-mix(in srgb,var(--acento) 22%,var(--fondo)),var(--fondo) 70%);
+    padding:max(24px,env(safe-area-inset-top,0px)) max(20px,env(safe-area-inset-right,0px)) max(24px,env(safe-area-inset-bottom,0px)) max(20px,env(safe-area-inset-left,0px));box-sizing:border-box}
+  .portada{display:flex;flex-direction:column;align-items:center;gap:14px;max-width:340px;width:100%}
+  .marca{font:600 11px/1 var(--f);letter-spacing:.34em;text-transform:uppercase;color:var(--acento)}
+  h1{margin:0;font:italic 500 46px/1.05 var(--f);text-wrap:balance}
+  .fecha{margin:0;font:italic 400 20px/1.3 var(--f);color:var(--suave)}
+  .flor{width:74px;height:74px;margin:10px 0 6px}
+  .botones{display:flex;flex-direction:column;gap:12px;width:100%;margin-top:8px}
+  .boton{display:block;padding:15px 20px;border-radius:999px;text-decoration:none;font:600 19px/1 var(--f);letter-spacing:.02em;transition:transform .15s}
+  .boton:active{transform:scale(.97)}
+  .boton:focus-visible{outline:2px solid var(--texto);outline-offset:3px}
+  .principal{background:var(--acento);color:var(--sobre);box-shadow:0 8px 24px rgba(0,0,0,.25)}
+  .secundario{border:1px solid var(--acento);color:var(--texto)}
+  .aviso{margin:4px 0 0;font:italic 400 16px/1.3 var(--f);color:var(--suave)}
+  .barra{width:120px;height:2px;border-radius:2px;background:color-mix(in srgb,var(--texto) 18%,transparent);overflow:hidden}
+  .barra i{display:block;height:100%;width:100%;background:var(--acento);transform-origin:left;animation:carga 6s linear forwards}
+  @keyframes carga{from{transform:scaleX(0)}to{transform:scaleX(1)}}
+  @media (prefers-reduced-motion:reduce){.barra{display:none}}
 </style>
 <script src="dias.js"></script>
 </head>
 <body>
-<p id="msg">Abriendo el ramo del día…</p>
+<main class="portada">
+  <span class="marca">Ramo del día</span>
+  <svg class="flor" id="flor" viewBox="0 0 100 100" aria-hidden="true"></svg>
+  <h1>Buenos días</h1>
+  <p class="fecha" id="fecha">—</p>
+  <div class="botones">
+    <a class="boton principal" id="irRamo" href="#">Ver el ramo de hoy</a>
+    <a class="boton secundario" href="adviento/">Calendario de Adviento</a>
+  </div>
+  <p class="aviso" id="aviso">El ramo se abre solo en unos segundos</p>
+  <div class="barra" id="barra"><i></i></div>
+</main>
 <noscript><p>Para ver el ramo hay que activar JavaScript.</p></noscript>
 <script>
 (() => {
   // El ramo cambia cada día a las 7:00, según la hora del propio móvil.
-  const HORA_CAMBIO = 7;
+  const HORA_CAMBIO = 7, ESPERA = 6000;
+  const MESES = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
+  const SEM = ['domingo','lunes','martes','miércoles','jueves','viernes','sábado'];
   const ahora = new Date();
   if (ahora.getHours() < HORA_CAMBIO) ahora.setDate(ahora.getDate() - 1);
   const p2 = (n) => String(n).padStart(2, '0');
   const hoy = `${ahora.getFullYear()}-${p2(ahora.getMonth() + 1)}-${p2(ahora.getDate())}`;
-  const dias = (Array.isArray(window.DIAS) ? window.DIAS : []).filter((d) => /^\d{4}-\d{2}-\d{2}$/.test(d)).sort();
-  if (!dias.length) { document.getElementById('msg').textContent = 'Todavía no hay ningún ramo.'; return; }
+  const ramos = (Array.isArray(window.RAMOS) ? window.RAMOS : []).filter((r) => r && /^\d{4}-\d{2}-\d{2}$/.test(r.fecha)).sort((a, b) => (a.fecha < b.fecha ? -1 : 1));
+  const ir = document.getElementById('irRamo');
+  if (!ramos.length) { ir.hidden = true; document.getElementById('aviso').textContent = 'Todavía no hay ningún ramo.'; document.getElementById('barra').hidden = true; return; }
   // El de hoy; si aún no está, el último que haya antes; y si no, el primero.
-  let elegido = dias[0];
-  for (const d of dias) if (d <= hoy) elegido = d;
-  location.replace(`dias/${elegido}.html`);
+  let r = ramos[0];
+  for (const x of ramos) if (x.fecha <= hoy) r = x;
+  const destino = `dias/${r.fecha}.html`;
+  ir.href = destino;
+
+  // Colores del ramo del día
+  const raiz = document.documentElement.style, col = Array.isArray(r.colores) ? r.colores : [];
+  const lum = (h) => { const n = parseInt(String(h).slice(1, 7), 16); if (isNaN(n)) return 0; const c = [n >> 16, (n >> 8) & 255, n & 255].map((v) => { v /= 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; }); return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2]; };
+  const fondo = /^#[0-9a-f]{6}$/i.test(r.fondo || '') ? r.fondo : '#0d0206';
+  const claro = lum(fondo) > 0.4;
+  const acento = /^#[0-9a-f]{6}$/i.test(col[0] || '') ? col[0] : '#d9625f';
+  raiz.setProperty('--fondo', fondo);
+  raiz.setProperty('--texto', claro ? '#2a2230' : '#f6efe2');
+  raiz.setProperty('--suave', claro ? 'rgba(42,34,48,.68)' : 'rgba(246,239,226,.72)');
+  raiz.setProperty('--acento', acento);
+  raiz.setProperty('--sobre', lum(acento) > 0.35 ? '#1a1418' : '#ffffff');
+  document.querySelector('meta[name="theme-color"]').setAttribute('content', fondo);
+
+  // Florecita con los colores del día
+  const svg = document.getElementById('flor'), NS = 'http://www.w3.org/2000/svg';
+  const el = (t, a) => { const e = document.createElementNS(NS, t); for (const k in a) e.setAttribute(k, a[k]); svg.append(e); return e; };
+  el('path', { d: 'M50 62 C 50 75, 48 86, 44 96', stroke: col[2] || '#6f7e62', 'stroke-width': 3, fill: 'none', 'stroke-linecap': 'round' });
+  el('ellipse', { cx: 36, cy: 82, rx: 9, ry: 4, transform: 'rotate(-30 36 82)', fill: col[2] || '#6f7e62' });
+  for (let i = 0; i < 7; i++) el('ellipse', { cx: 50, cy: 22, rx: 11, ry: 17, fill: acento, opacity: 0.92, transform: `rotate(${i * 360 / 7} 50 40)` });
+  el('circle', { cx: 50, cy: 40, r: 9, fill: col[1] || '#f3ead8' });
+
+  const [y, m, d] = r.fecha.split('-').map(Number);
+  const dia = SEM[new Date(y, m - 1, d).getDay()];
+  document.getElementById('fecha').textContent = `${dia.charAt(0).toUpperCase()}${dia.slice(1)}, ${d} de ${MESES[m - 1]}`;
+
+  // Si no se toca nada, abre el ramo solo
+  const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  let auto = setTimeout(() => location.replace(destino), reduce ? 2500 : ESPERA);
+  const parar = () => { clearTimeout(auto); document.getElementById('aviso').hidden = true; document.getElementById('barra').hidden = true; };
+  for (const a of document.querySelectorAll('.boton')) a.addEventListener('pointerdown', parar);
+  document.addEventListener('visibilitychange', () => { if (document.hidden) clearTimeout(auto); });
 })();
 </script>
 </body>
